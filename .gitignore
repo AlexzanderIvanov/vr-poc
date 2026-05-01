@@ -5,6 +5,10 @@ node_modules/
 # Use Git LFS if you need to version these.
 video/
 
+# Lap videos served by the app — excluded to keep the repo lean
+public/assets/videos/
+dist/assets/videos/
+
 # Editor / OS
 .vscode/
 .idea/
