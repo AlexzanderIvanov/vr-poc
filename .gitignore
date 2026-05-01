@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Raw/source video processing folder (contains files >100MB; GitHub hard limit)
+# Use Git LFS if you need to version these.
+video/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local backup of pre-init git directory (do not track)
+.git.backup/
+
+# Debug / scratch artifacts left at repo root from prior dev sessions
+/latest_track_check*.png
+/track_*.png
+/web_*.png
+/web_*.txt

@@ -1,0 +1,1582 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, sans-serif;
+  background: #090b10;
+  color: #eef2ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Use dynamic viewport height on mobile so the viewer fills under the
+   browser chrome (URL bar) without dead space. */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
+body {
+  overflow: hidden;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  width: 100%;
+  height: 100%;
+  background: #090b10;
+}
+
+.hud {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  background: rgba(13, 16, 22, 0.97);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-y: auto;
+}
+
+.hud h1 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.hud p {
+  margin: 0;
+  color: #b7bfd8;
+  line-height: 1.4;
+}
+
+.hud-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.rec-btn {
+  min-width: 90px;
+  color: #f44336 !important;
+  border-color: rgba(244, 67, 54, 0.3) !important;
+  font-weight: 600;
+}
+
+.rec-btn-active {
+  background: rgba(244, 67, 54, 0.15) !important;
+  border-color: rgba(244, 67, 54, 0.6) !important;
+  animation: recPulse 1s ease-in-out infinite;
+}
+
+@keyframes recPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.3); }
+  50% { box-shadow: 0 0 12px 2px rgba(244, 67, 54, 0.4); }
+}
+
+.hud label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.hud button,
+.hud select,
+.hud input[type='range'] {
+  width: 100%;
+}
+
+.hud button,
+.hud select {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #181d27;
+  color: inherit;
+}
+
+.lap-list {
+  gap: 4px;
+}
+
+.session-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.session-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8892ab;
+  padding: 4px 2px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 2px;
+}
+
+.lap-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lap-row {
+  display: grid !important;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 10px;
+  flex-direction: row !important;
+}
+
+.lap-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lap-name {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lap-tags {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.device-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border: 1px solid;
+  border-radius: 4px;
+  color: #ccd3e8;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mode-badge {
+  font-size: 0.65rem;
+  color: #7b8399;
+  font-style: italic;
+}
+
+.lap-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+/* Sync controls */
+.sync-controls {
+  padding-left: 38px;
+}
+
+.sync-toggle {
+  font-size: 0.72rem;
+  color: #8892ab;
+  background: none !important;
+  border: none !important;
+  padding: 2px 4px !important;
+  cursor: pointer;
+  text-align: left;
+  width: auto !important;
+}
+
+.sync-toggle:hover {
+  color: #b7bfd8;
+}
+
+.sync-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.sync-slider {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  font-size: 0.75rem !important;
+}
+
+.sync-slider-label {
+  display: flex;
+  justify-content: space-between;
+  color: #8892ab;
+}
+
+.sync-slider-value {
+  font-family: monospace;
+  color: #b7bfd8;
+}
+
+.sync-slider input[type='range'] {
+  height: 4px;
+  accent-color: #4dd0e1;
+}
+
+.sync-reset {
+  font-size: 0.72rem !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  margin-top: 2px;
+  background: rgba(255, 107, 107, 0.12) !important;
+  border-color: rgba(255, 107, 107, 0.25) !important;
+  color: #ff9b9b !important;
+}
+
+.sync-reset:hover {
+  background: rgba(255, 107, 107, 0.2) !important;
+}
+
+/* Warnings */
+.warnings {
+  background: rgba(255, 183, 77, 0.08) !important;
+  border-color: rgba(255, 183, 77, 0.25) !important;
+}
+
+.warning-row {
+  font-size: 0.78rem;
+  color: #ffb74d;
+  line-height: 1.3;
+}
+
+.viewer-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(9, 11, 16, 0.92);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  min-width: 360px;
+}
+
+.loading-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #b7bfd8;
+}
+
+.loading-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4dd0e1, #4caf50);
+  border-radius: 3px;
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 12px rgba(77, 208, 225, 0.4);
+}
+
+.loading-progress {
+  font-family: monospace;
+  font-size: 20px;
+  font-weight: 800;
+  color: #eef2ff;
+  letter-spacing: 1px;
+}
+
+.loading-detail {
+  font-size: 11px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.4);
+  max-width: 320px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Small colored dot above each car — replaces the old per-car label. */
+.car-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+}
+
+.car-dot-ghost {
+  opacity: 0.7;
+}
+
+/* Telemetry panel */
+.telemetry-panel {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.telemetry-panel { position: absolute; }
+.telemetry-canvas {
+  display: block;
+  width: 400px;
+  height: 200px;
+}
+.telemetry-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400px;
+  height: 200px;
+  pointer-events: none;
+}
+
+/* Delta chart panel */
+.delta-panel {
+  position: absolute;
+  bottom: 168px;
+  right: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.delta-panel { position: absolute; bottom: 218px; right: 12px; border-radius: 10px; overflow: hidden; }
+.delta-canvas {
+  display: block;
+  width: 400px;
+  height: 80px;
+}
+.delta-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400px;
+  height: 80px;
+  pointer-events: none;
+}
+
+/* Track map panel */
+.track-map-panel {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.track-map-canvas {
+  display: block;
+  width: 280px;
+  height: 280px;
+}
+.track-map-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 280px;
+}
+
+/* Track markers */
+.track-marker {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  text-shadow: 0 0 8px currentColor;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.marker-icon {
+  font-size: 18px;
+}
+
+.marker-counter {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(9, 11, 16, 0.8);
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font-family: monospace;
+}
+
+.track-marker-brake {
+  color: #f44336;
+}
+
+.track-marker-throttle {
+  color: #4caf50;
+}
+
+.marker-diff {
+  font-size: 9px;
+  font-weight: 600;
+  color: #ffb74d;
+  background: rgba(9, 11, 16, 0.8);
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.brake-pair-marker {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1.5px solid;
+  border-radius: 6px;
+  padding: 1px 5px;
+  background: rgba(9, 11, 16, 0.75);
+}
+
+.brake-pair-icon {
+  font-size: 14px;
+  color: #f44336;
+  text-shadow: 0 0 6px #f44336;
+}
+
+.brake-pair-num {
+  font-size: 9px;
+  font-weight: 800;
+  color: #ffffff;
+  font-family: monospace;
+}
+
+.brake-diff-badge {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffb74d;
+  background: rgba(9, 11, 16, 0.9);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 183, 77, 0.5);
+  font-family: monospace;
+  text-shadow: 0 0 10px rgba(255, 183, 77, 0.6);
+  letter-spacing: 1px;
+}
+
+.hud-delta,
+.car-delta-badge {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 900;
+  font-family: monospace;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px currentColor;
+  white-space: nowrap;
+}
+
+.car-delta-badge {
+  border: 1.5px solid currentColor;
+  background: rgba(9, 11, 16, 0.85);
+}
+
+.hud-delta-behind {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.15);
+}
+
+.hud-delta-ahead {
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.15);
+}
+
+/* Phase labels on track */
+.phase-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  background: rgba(9, 11, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.phase-label-name {
+  opacity: 0.8;
+}
+
+.phase-label-dist {
+  font-family: monospace;
+  font-weight: 400;
+}
+
+.phase-label-braking,
+.phase-label-trail_braking {
+  color: #f44336;
+  border-color: rgba(244, 67, 54, 0.3);
+}
+
+.phase-label-full_throttle {
+  color: #4caf50;
+  border-color: rgba(76, 175, 80, 0.3);
+}
+
+.phase-label-trail_braking {
+  color: #ff9800;
+  border-color: rgba(255, 152, 0, 0.3);
+}
+
+.phase-label-coasting {
+  color: #90a4ae;
+  border-color: rgba(144, 164, 174, 0.2);
+}
+
+/* Car telemetry HUD */
+.car-telemetry-hud {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(9, 11, 16, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  min-width: 140px;
+  transition: border-color 0.2s;
+}
+
+.hud-braking {
+  border-color: rgba(244, 67, 54, 0.6);
+  box-shadow: 0 0 12px rgba(244, 67, 54, 0.3);
+}
+
+.hud-throttle {
+  border-color: rgba(76, 175, 80, 0.6);
+  box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
+}
+
+.hud-coast {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hud-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+
+.hud-bar-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  width: 28px;
+  text-align: right;
+}
+
+.hud-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hud-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.05s;
+}
+
+.hud-bar-tps {
+  background: #4caf50;
+}
+
+.hud-bar-brake {
+  background: #f44336;
+}
+
+.hud-rpm {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  margin-top: 3px;
+  font-family: monospace;
+}
+
+/* Gamification panel */
+.gamification-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.gami-rating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gami-grade {
+  font-size: 1.8rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gami-grade-S { color: #ffd700; text-shadow: 0 0 12px rgba(255, 215, 0, 0.5); }
+.gami-grade-A { color: #4caf50; text-shadow: 0 0 8px rgba(76, 175, 80, 0.4); }
+.gami-grade-B { color: #42a5f5; }
+.gami-grade-C { color: #ff9800; }
+.gami-grade-D { color: #9e9e9e; }
+
+.gami-score {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #b7bfd8;
+}
+
+.gami-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gami-stat {
+  display: grid;
+  grid-template-columns: 55px 1fr 36px;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.gami-stat-label {
+  color: #8892ab;
+}
+
+.gami-stat-val {
+  text-align: right;
+  font-family: monospace;
+  color: #b7bfd8;
+}
+
+.gami-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.gami-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.gami-bar-throttle { background: #4caf50; }
+.gami-bar-brake { background: #f44336; }
+.gami-bar-coast { background: #607d8b; }
+
+.gami-details {
+  display: flex;
+  gap: 12px;
+  font-size: 0.72rem;
+  color: #7b8399;
+}
+
+/* Zone popup */
+.zone-popup {
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  animation: zonePopIn 0.3s ease-out;
+}
+
+.zone-popup-great {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.zone-popup-good {
+  background: rgba(66, 165, 245, 0.15);
+  border: 1px solid rgba(66, 165, 245, 0.3);
+}
+
+.zone-popup-early {
+  background: rgba(255, 152, 0, 0.15);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.zone-popup-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #eef2ff;
+}
+
+.zone-popup-score {
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: #b7bfd8;
+}
+
+/* Sector engineer tips */
+.sector-tips-panel {
+  position: absolute;
+  bottom: 300px;
+  left: 12px;
+  width: 280px;
+  padding: 10px 12px;
+  background: rgba(9, 11, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  animation: tipsSlideIn 0.25s ease-out;
+}
+
+.sector-tips-header {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffb74d;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 183, 77, 0.2);
+}
+
+.sector-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #ccd3e8;
+}
+
+.sector-tip-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sector-tip-text {
+  flex: 1;
+}
+
+@keyframes tipsSlideIn {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes zonePopIn {
+  from { transform: scale(0.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ============================================================
+ * Mobile toolbar + drawers
+ * ============================================================ */
+
+.mobile-toolbar,
+.mobile-scrubber,
+.mobile-drawer-backdrop,
+.mobile-telemetry-cards {
+  display: none;
+}
+
+/* Desktop: let the map/chart panels render inline (their children are
+   absolutely-positioned and overlay the viewer). */
+.map-panels,
+.data-panels {
+  display: contents;
+}
+
+@media (max-width: 768px) {
+  /* Single-column on mobile; the hud becomes a slide-in drawer. */
+  .app-shell {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr !important;
+  }
+
+  /* Floating button stack in the upper-left. */
+  .mobile-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 50;
+  }
+
+  .mtb-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    background: rgba(13, 16, 22, 0.85);
+    color: #eef2ff;
+    font-size: 20px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    backdrop-filter: blur(6px);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .mtb-btn:active {
+    transform: scale(0.95);
+  }
+
+  .mtb-btn-active {
+    background: rgba(77, 208, 225, 0.18);
+    border-color: rgba(77, 208, 225, 0.6);
+    color: #4dd0e1;
+  }
+
+  /* Shortcut buttons whose label is the current value (e.g. "1x", "CHS"). */
+  .mtb-btn-text {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-family: monospace;
+  }
+
+  /* Bottom-of-screen scrubber overlay — always visible, full-width edge-to-edge. */
+  .mobile-scrubber {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: rgba(13, 16, 22, 0.9);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(6px);
+    z-index: 40;
+  }
+
+  .mobile-scrubber-time {
+    font-size: 11px;
+    font-family: monospace;
+    color: #b7bfd8;
+    text-align: center;
+  }
+
+  .mobile-scrubber input[type='range'] {
+    width: 100%;
+    accent-color: #4dd0e1;
+  }
+
+  /* Backdrop closes any open drawer on tap. */
+  .mobile-drawer-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 55;
+    animation: fadeIn 0.18s ease-out;
+  }
+
+  /* Menu drawer — slides in from the left and shows the full hud. */
+  .hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(88vw, 360px);
+    max-height: 100%;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: none;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease-out;
+    z-index: 60;
+    overflow-y: auto;
+  }
+
+  .hud-open {
+    transform: translateX(0);
+    box-shadow: 6px 0 24px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Map / data panels hidden by default on mobile; revealed inside their
+     respective bottom-sheet drawer when *-open is set. */
+  .map-panels,
+  .data-panels {
+    display: none;
+  }
+
+  .map-panels-open,
+  .data-panels-open {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 80vh;
+    padding: 16px 12px 80px;
+    background: rgba(13, 16, 22, 0.97);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    overflow-y: auto;
+    z-index: 60;
+    animation: slideUp 0.25s ease-out;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Inside the drawers, re-position child panels to flow naturally. */
+  .map-panels-open .track-map-panel,
+  .data-panels-open .delta-panel,
+  .data-panels-open .telemetry-panel {
+    position: static;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+
+  .map-panels-open .track-map-canvas,
+  .map-panels-open .track-map-dot {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .data-panels-open .telemetry-canvas,
+  .data-panels-open .telemetry-playhead,
+  .data-panels-open .delta-canvas,
+  .data-panels-open .delta-playhead {
+    width: 100%;
+    height: auto;
+  }
+
+  /* Hide engineer-notes panel on mobile (it overlays the viewer awkwardly). */
+  .sector-tips-panel {
+    display: none;
+  }
+
+  /* Hide the 3D-anchored telemetry card on mobile — replaced by the fixed
+     top-of-screen overlay below. The delta badge is kept above the car. */
+  .car-telemetry-hud-wrap {
+    display: none !important;
+  }
+
+  /* Top-of-screen telemetry cards — two compact cards side-by-side, each
+     outlined with its lap color. */
+  .mobile-telemetry-cards {
+    display: flex;
+    gap: 8px;
+    position: absolute;
+    top: 10px;
+    left: 68px;  /* leave room for the toolbar column */
+    right: 10px;
+    z-index: 35;
+    pointer-events: none;
+  }
+
+  .mobile-tel-card {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px 8px;
+    background: rgba(9, 11, 16, 0.86);
+    border: 2px solid;
+    border-radius: 8px;
+    backdrop-filter: blur(6px);
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.15s;
+  }
+
+  .mobile-tel-card-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    opacity: 0.8;
+  }
+
+  .mobile-tel-card .hud-bar-row {
+    margin: 2px 0;
+  }
+
+  .mobile-tel-card .hud-bar-label {
+    font-size: 9px;
+    width: 22px;
+  }
+
+  .mobile-tel-card .hud-bar {
+    height: 6px;
+  }
+
+  .mobile-tel-card .hud-rpm {
+    font-size: 10px;
+    margin-top: 2px;
+  }
+
+  .mobile-tel-card.hud-braking {
+    box-shadow: 0 0 10px rgba(244, 67, 54, 0.35);
+  }
+
+  .mobile-tel-card.hud-throttle {
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.35);
+  }
+
+  /* Delta badge above the car is kept but shrunk a bit on mobile. */
+  .car-delta-badge {
+    font-size: 16px;
+    padding: 3px 7px;
+  }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* --------------------------------------------------------------------- *
+ * Corner analysis overlay
+ * --------------------------------------------------------------------- */
+
+.corner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+
+.corner-apex-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.corner-apex-ring {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 3px solid currentColor;
+  background: rgba(9, 11, 16, 0.35);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
+}
+
+.corner-apex-label {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  background: rgba(9, 11, 16, 0.7);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.corner-delta-badge {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(9, 11, 16, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  white-space: nowrap;
+  color: #eef2ff;
+}
+
+.corner-delta-brake  { color: #ff8a80; border-color: rgba(244, 67, 54, 0.6); }
+.corner-delta-throttle { color: #ffe082; border-color: rgba(255, 235, 59, 0.6); }
+
+.corner-delta-label { font-size: 9px; opacity: 0.7; letter-spacing: 1px; }
+.corner-delta-value { font-size: 11px; }
+
+.corner-analysis-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: rgba(9, 11, 16, 0.93);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+  z-index: 8;
+}
+
+.corner-analysis-header {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #4dd0e1;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(77, 208, 225, 0.25);
+}
+
+.corner-analysis-subhead {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #8892ab;
+  margin: 8px 0 4px;
+  text-transform: uppercase;
+}
+
+.corner-analysis-sector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.corner-analysis-sector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.corner-analysis-sector-num {
+  color: #8892ab;
+  font-size: 9px;
+}
+
+.corner-analysis-sector-arc {
+  color: #e6edf7;
+  font-weight: 700;
+}
+
+.corner-analysis-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.corner-analysis-empty {
+  font-size: 11px;
+  color: #8892ab;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.corner-analysis-row {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.corner-analysis-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.corner-analysis-row-num {
+  font-weight: 800;
+  font-size: 13px;
+  color: #e6edf7;
+}
+
+.corner-analysis-row-delta {
+  display: flex;
+  gap: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.ca-brk-delta { color: #ff8a80; }
+.ca-ft-delta  { color: #ffe082; }
+.ca-ga-delta  { color: #ffb74d; }
+.ca-sa-delta  { color: #ce93d8; }
+
+.corner-analysis-legend {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.corner-analysis-legend-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+}
+
+.corner-analysis-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #b7bfd8;
+  line-height: 1.4;
+}
+
+.corner-analysis-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
+.corner-analysis-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #b7bfd8;
+}
+
+.corner-analysis-lap {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-family: ui-monospace, monospace;
+}
+
+.corner-analysis-lap-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.corner-analysis-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.corner-analysis-totals-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.corner-analysis-totals-value {
+  color: #e6edf7;
+  font-weight: 700;
+}
+
+.corner-analysis-totals-delta {
+  font-size: 11px;
+  color: #ffb74d;
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.corner-analysis-row-arc {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: #ffb74d;
+  margin: 2px 0;
+}
+
+.active-toggle {
+  background: rgba(77, 208, 225, 0.18) !important;
+  border-color: rgba(77, 208, 225, 0.55) !important;
+  color: #4dd0e1 !important;
+}
+
+/* Hide the corner analysis side panel on tight widths — it's driven by
+   the same data that drives the on-track markers, which are visible on
+   mobile anyway. */
+@media (max-width: 900px) {
+  .corner-analysis-panel { display: none; }
+}
+
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .hud {
+    max-height: 42vh;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+
+/* ============================================================
+   Lap-video overlay (PIP) — only on the /video route.
+   ============================================================
+   Bottom-right of the viewport, above the 3D canvas. Two sizes
+   (normal / large), togglable from the controls strip on the
+   overlay's bottom edge. Mobile shrinks it and pulls it up so it
+   doesn't collide with the bottom scrubber. */
+
+.video-overlay {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 200;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  /* The wrapper itself is non-interactive so taps land on the WebGL canvas
+     underneath (orbit, pinch, etc.) instead of being captured by the PIP
+     surface. Children that need to react to taps re-enable below. */
+  pointer-events: none;
+}
+
+/* Hidden state — keeps the <video> + <audio> elements mounted (so their
+   decoder pipelines stay warm) but removes the wrapper from layout and
+   paint. Toggling visible→hidden→visible is then cheap and seamless,
+   instead of unmounting and cold-starting the media engine each time. */
+.video-overlay-hidden {
+  display: none;
+}
+
+.video-overlay-normal {
+  width: 320px;
+  height: 180px;
+}
+
+.video-overlay-large {
+  width: 640px;
+  height: 360px;
+}
+
+.video-overlay-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+  /* The video itself doesn't need to be tappable (no native controls,
+     no fullscreen-on-tap). Letting taps fall through to the canvas means
+     orbit/pinch/click on the cars works even when the PIP is on top. */
+  pointer-events: none;
+  /* Force the video onto its own GPU compositor layer so the WebGL canvas
+     and the decoded video frames don't share a single paint pass. On mid-
+     tier mobile GPUs this is the difference between smooth playback and
+     the renderer scheduler stalling every few frames. */
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.video-overlay-controls {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  /* ``left: auto`` is the default but we set it explicitly so any inherited
+     ``left`` from the desktop HUD's slider styles can't pull this strip
+     toward the left edge of the wrapper. */
+  left: auto;
+  bottom: auto;
+  display: flex;
+  gap: 4px;
+  /* Always-visible — was 0.4 + hover-to-1.0, but the cursor often isn't
+     hovering the small PIP and on touch there's no hover at all. */
+  opacity: 0.95;
+  transition: opacity 0.15s ease;
+  /* Stack above the spinner / error / label / video so nothing can paint
+     on top of the buttons. */
+  z-index: 2;
+  /* Re-enable interaction on the controls strip — the only part of the
+     overlay the user is meant to tap. */
+  pointer-events: auto;
+}
+
+.video-overlay:hover .video-overlay-controls {
+  opacity: 1;
+}
+
+.video-overlay-controls button {
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 4px;
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  /* Drop shadow so the buttons read clearly even on a bright frame
+     (sky / kerbs / pit lights at the start/finish straight). */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.video-overlay-controls button:hover {
+  background: rgba(0, 0, 0, 0.85);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.video-overlay-label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #e0e0e0;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  padding: 2px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.video-overlay-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.video-overlay-spinner-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #4dd0e1;
+  animation: video-overlay-spin 0.9s linear infinite;
+}
+
+@keyframes video-overlay-spin {
+  to { transform: rotate(360deg); }
+}
+
+.video-overlay-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  color: #ff8a8a;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  text-align: center;
+  padding: 12px;
+}
+
+/* On mobile keep the overlay small and lift it above the bottom
+   scrubber strip (44 px). Tap a corner to expand to the larger
+   size — but the larger size is still constrained to viewport. */
+@media (max-width: 768px) {
+  .video-overlay {
+    right: 8px;
+    bottom: 64px;
+  }
+  .video-overlay-normal {
+    width: 180px;
+    height: 102px;
+  }
+  .video-overlay-large {
+    width: min(92vw, 480px);
+    height: min(52vw, 270px);
+  }
+  /* Mobile: slightly larger tap targets — 28 px is below Apple's 44 pt /
+     Material's 48 dp guideline. We can't go full 44 here without dwarfing
+     the PIP at 180×102, but 32 is a reasonable middle ground. */
+  .video-overlay-controls button {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+}
