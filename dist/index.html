@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Next-gen race telemetry</title>
+    <meta name="description" content="Interactive 3D replay of BMW E46 laps at A1 Motor Park with GPS, IMU and CAN-bus telemetry." />
+
+    <!-- Open Graph (Facebook, LinkedIn, WhatsApp, Telegram, iMessage, Discord, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Next-gen race telemetry" />
+    <meta property="og:description" content="Interactive 3D replay of BMW E46 laps at A1 Motor Park with GPS, IMU and CAN-bus telemetry." />
+    <meta property="og:image" content="/preview.png" />
+    <meta property="og:image:width" content="375" />
+    <meta property="og:image:height" content="812" />
+    <meta property="og:image:type" content="image/png" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Next-gen race telemetry" />
+    <meta name="twitter:description" content="Interactive 3D replay of BMW E46 laps at A1 Motor Park with GPS, IMU and CAN-bus telemetry." />
+    <meta name="twitter:image" content="/preview.png" />
+
+    <!--
+      Asset preloading.
+
+      preconnect/dns-prefetch start the TCP+TLS handshake to the CDN before
+      the JS bundle has even started executing — saves 100-300 ms on first
+      paint when assets aren't in cache.
+
+      The inline boot script then:
+        1. Picks the right asset base URL based on hostname (matching
+           src/config.js's logic — keep the two in sync).
+        2. Fetches the route's manifest *immediately*, in parallel with the
+           JS bundle download. App.jsx's later fetch() of the same URL is
+           served from the in-flight HTTP cache (no extra round-trip).
+        3. Parses the manifest the moment it arrives and injects
+           <link rel="preload"> tags for the heavy GLBs (track + car) so
+           the browser starts pulling them while React is still booting.
+
+      No build-time templating needed — the manifest URL is per-route and
+      the GLB URLs (with ?v=… cache busts) live inside the manifest.
+    -->
+    <link rel="preconnect" href="https://vr-raceai-me-poc.b-cdn.net" crossorigin>
+    <link rel="dns-prefetch" href="https://vr-raceai-me-poc.b-cdn.net">
+    <script>
+      (function () {
+        var host = location.hostname || ''
+        var local = (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.local'))
+        var override = new URLSearchParams(location.search).get('cdn')
+        var base = override === 'force'
+          ? 'https://vr-raceai-me-poc.b-cdn.net'
+          : (override === 'off' || local ? '' : 'https://vr-raceai-me-poc.b-cdn.net')
+
+        var routeManifests = {
+          '/slow-and-slower': '/assets/laps/manifest_slow_and_slower.json',
+          '/slow-vs-master': '/assets/laps/manifest_slow_vs_master.json',
+          '/video': '/assets/laps/manifest_video.json',
+        }
+        var manifestPath = routeManifests[location.pathname] || '/assets/laps/manifest.json'
+        var manifestUrl = base + manifestPath
+
+        // Add a preload hint for the manifest so the connection-warming
+        // converts into an actual download right away.
+        var l = document.createElement('link')
+        l.rel = 'preload'
+        l.as = 'fetch'
+        l.href = manifestUrl
+        l.crossOrigin = 'anonymous'
+        document.head.appendChild(l)
+
+        // Kick off the manifest fetch ourselves so we can read it and
+        // inject preload tags for the GLBs as soon as it lands. App.jsx
+        // will fetch the same URL later — the browser's HTTP cache merges
+        // the two requests transparently.
+        fetch(manifestUrl, { credentials: 'omit' })
+          .then(function (r) { return r.json() })
+          .then(function (m) {
+            ;[m && m.track, m && m.car].forEach(function (rel) {
+              if (!rel) return
+              var url = rel.indexOf('http') === 0 ? rel : (base + rel)
+              var p = document.createElement('link')
+              p.rel = 'preload'
+              p.as = 'fetch'
+              p.href = url
+              p.crossOrigin = 'anonymous'
+              document.head.appendChild(p)
+            })
+          })
+          .catch(function () { /* preload is best-effort */ })
+      })()
+    </script>
+    <script type="module" crossorigin src="/assets/index-BOpH_hBf.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BQF4COvZ.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+  </html>
