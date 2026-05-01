@@ -1,0 +1,28 @@
+.git
+.gitignore
+.idea
+.vscode
+.claude
+.git.backup
+
+node_modules
+dist
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docs / scratch
+README.md
+deploy.bat
+latest_track_check*.png
+track_*.png
+web_*.png
+web_*.txt
+
+# Raw video sources (gitignored, but be explicit for build context)
+video/

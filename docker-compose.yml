@@ -1,0 +1,51 @@
+# Dokploy deployment for vr.raceai.me
+# Traefik (provided by Dokploy) terminates TLS via the `letsencrypt` resolver
+# and routes traffic to this service over the shared `dokploy-network`.
+
+services:
+  vr-poc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vr-poc:latest
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+
+      # ---- HTTP router (redirect to HTTPS) --------------------------------
+      - "traefik.http.routers.vr-poc-web.rule=Host(`vr.raceai.me`)"
+      - "traefik.http.routers.vr-poc-web.entrypoints=web"
+      - "traefik.http.routers.vr-poc-web.middlewares=vr-poc-https-redirect@docker"
+
+      # ---- HTTPS router ----------------------------------------------------
+      - "traefik.http.routers.vr-poc-websecure.rule=Host(`vr.raceai.me`)"
+      - "traefik.http.routers.vr-poc-websecure.entrypoints=websecure"
+      - "traefik.http.routers.vr-poc-websecure.tls=true"
+      - "traefik.http.routers.vr-poc-websecure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.vr-poc-websecure.service=vr-poc-svc"
+
+      # ---- Service ---------------------------------------------------------
+      - "traefik.http.services.vr-poc-svc.loadbalancer.server.port=80"
+
+      # ---- Middlewares -----------------------------------------------------
+      - "traefik.http.middlewares.vr-poc-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.vr-poc-https-redirect.redirectscheme.permanent=true"
+
+      # Compress responses at the edge (skips already-compressed assets)
+      - "traefik.http.routers.vr-poc-websecure.middlewares=vr-poc-compress@docker"
+      - "traefik.http.middlewares.vr-poc-compress.compress=true"
+
+networks:
+  dokploy-network:
+    external: true
