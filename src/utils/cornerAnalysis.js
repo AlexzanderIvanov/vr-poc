@@ -40,13 +40,15 @@
  */
 
 import * as THREE from 'three'
+import {
+  THROTTLE_ON_TPS,
+  TPS_FULL_THRESHOLD as FULL_THROTTLE_TPS,
+  OSCILLATION_TPS_DIP,
+} from '../constants'
 
-// Tunables. Chosen to match the 'tps > 200' / 'fbp > 10' thresholds used by
-// the HUD gamification code, so the analysis agrees with what the driver
-// visibly sees.
-export const THROTTLE_ON_TPS = 50
-export const FULL_THROTTLE_TPS = 240
-export const OSCILLATION_TPS_DIP = 25
+// Re-export so consumers that previously imported these from this module
+// keep working. New code should pull straight from `../constants`.
+export { THROTTLE_ON_TPS, FULL_THROTTLE_TPS, OSCILLATION_TPS_DIP }
 
 const UP = new THREE.Vector3(0, 1, 0)
 

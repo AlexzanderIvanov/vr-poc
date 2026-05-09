@@ -1,9 +1,13 @@
 # Dependencies
 node_modules/
 
-# Raw/source video processing folder (contains files >100MB; GitHub hard limit)
+# Raw/source video processing folder (contains files >100MB; GitHub hard limit).
+# Anchored with a leading slash so the rule only matches the top-level
+# `video/` directory — without the slash this pattern also matched
+# `src/components/Video/` on case-insensitive filesystems (macOS git
+# default), silently dropping the VideoOverlay source from CI builds.
 # Use Git LFS if you need to version these.
-video/
+/video/
 
 # Lap videos served by the app — excluded to keep the repo lean
 public/assets/videos/

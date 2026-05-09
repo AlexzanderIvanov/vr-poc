@@ -30,6 +30,12 @@ export const TPS_FULL_THRESHOLD = 240
 export const TPS_PAD_KNOCKBACK_THRESHOLD = 200 // above this, brake events are ignored
 export const TRAIL_BRAKE_TPS_MIN = 50
 
+// Corner-analysis thresholds (used by `utils/cornerAnalysis.js`).
+// `TPS_FULL_THRESHOLD` above is the same concept as the legacy
+// `FULL_THROTTLE_TPS` that lived here — kept under one name now.
+export const THROTTLE_ON_TPS = 50
+export const OSCILLATION_TPS_DIP = 25
+
 // Analysis thresholds (race engineer tips)
 export const BRAKE_DIFF_FRAMES_MIN = 2
 export const BRAKE_PRESSURE_DIFF_MIN = 15
@@ -83,11 +89,25 @@ export const CHART_COLORS = {
   tps: '#4caf50',
   brake: '#f44336',
   rpm: '#42a5f5',
+  speed: '#42a5f5',           // GPS speed shares the blue slot with RPM
+  steer: '#ffb74d',
   delta_faster: '#4caf50',
   delta_slower: '#f44336',
   playhead: '#ffffff',
   grid: 'rgba(255,255,255,0.06)',
 }
+
+// Chart pointer-interaction thresholds (consumed by useEchartsClickToSeek).
+// These were inline magic numbers in the hook; centralised so click-feel
+// can be tuned without grepping the gesture handler.
+export const CHART_CLICK_PX        = 4   // mouse-move radius treated as a click
+export const CHART_HANDLE_HIT_PX   = 10  // distance to the playhead column counted as "grab"
+export const CHART_MIN_ZOOM_DRAG_S = 0.05 // hairline drags rejected as zoom intents
+
+// Class name for the playhead overlay div the rAF loop positions. Used by
+// both the React component that renders it and the hook that updates its
+// `style.left`. Kept here so renaming touches one place.
+export const PLAYHEAD_OVERLAY_CLASS = 'chart-playhead-overlay'
 
 // Canvas dimensions
 export const CANVAS_DIMS = {

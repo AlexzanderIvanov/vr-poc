@@ -1,0 +1,277 @@
+import { useCallback, useEffect, useRef } from 'react'
+import { useStore } from '../state/store'
+import { safe } from '../utils/safe'
+import { useChartGestures } from './useChartGestures'
+import { PLAYHEAD_OVERLAY_CLASS } from '../constants'
+
+/**
+ * Centralised wiring between an ECharts instance and the analysis-frame state.
+ *
+ *   1. Mirror `viewport` → chart dataZoom (fires only on actual zoom/pan).
+ *   2. Mirror `playhead` → a DOM-overlay div positioned via raf (NOT
+ *      ECharts markLine / graphic). This is the perf-critical path: the
+ *      previous markLine + graphic `setOption` calls at 15 Hz × 2 charts
+ *      blocked the main thread enough to starve the 3D render loop and
+ *      produce visibly choppy car animation. The DOM overlay updates
+ *      ~0.05 ms/frame and runs at native rAF rate.
+ *   3. Convert chart `dataZoom` events → `setViewport` action.
+ *   4. Pointer gestures live in `useChartGestures` (click-to-seek, scrub,
+ *      shift-pan, drag-zoom). It binds to the chart's zrender events, so
+ *      DOM events outside the canvas never reach the handler.
+ *   5. ResizeObserver → `chart.resize()`.
+ *
+ * Pixel↔data conversion:
+ *   `chart.convertFromPixel({gridIndex: N}, [x, y]) → [xValue, yValue]`
+ *   `chart.convertToPixel({gridIndex: N},   [xValue, yValue]) → [x, y]`
+ *
+ * HMR / lifecycle safety:
+ *   ECharts can briefly enter a half-initialised state during HMR and React
+ *   StrictMode double-mount where `convertToPixel` / `getModel` throw. All
+ *   such calls are wrapped in `safe()` to no-op rather than crash.
+ */
+
+// `safe()` lives in `utils/safe.js` (was duplicated here and in
+// `ChartValueLabels.jsx`). It wraps ECharts API calls that can throw
+// during HMR / StrictMode transitions and returns a fallback instead.
+
+// `<ChartPlayheadOverlay />` is exported from
+// ../components/Charts/ChartPlayheadOverlay.jsx — JSX can't live in this
+// .js file. Charts render it as a sibling of `<ReactECharts>` inside
+// their containerRef wrapper; this hook drives its `style.left` via raf.
+
+export function useEchartsTimeSync(echartsRef, containerRef, { tMax }) {
+  const viewport = useStore((s) => s.viewport)
+  const setViewport = useStore((s) => s.setViewport)
+  const ignoreNextRef = useRef(false)
+
+  // viewport → dataZoom (only fires when viewport actually changes — not in
+  // the playback hot path).
+  useEffect(() => {
+    const chart = echartsRef.current?.getEchartsInstance?.()
+    if (!chart || tMax <= 0) return
+    const startPct = (viewport.tStart / tMax) * 100
+    const endPct = (viewport.tEnd / tMax) * 100
+    ignoreNextRef.current = true
+    safe(() => chart.dispatchAction({ type: 'dataZoom', start: startPct, end: endPct }))
+  }, [viewport.tStart, viewport.tEnd, tMax, echartsRef])
+
+  // Playhead overlay — DOM div, NOT an ECharts markLine.
+  //
+  // Why DOM and not markLine/graphic:
+  //   ECharts `setOption` triggers its merge pipeline + canvas re-flush
+  //   (~5–15 ms per call on multi-grid charts). The previous version
+  //   called `setOption` twice per playhead tick × 2 charts × 15 Hz ≈
+  //   60 calls/s, blocking the main thread for hundreds of ms/s and
+  //   starving the THREE.js render loop. A DOM div positioned via
+  //   `style.left` costs ~0.05 ms per update and lets us run at 60 Hz
+  //   without involving React or ECharts at all.
+  //
+  // Lifecycle:
+  //   - The overlay is appended to the container wrapper that holds the
+  //     chart (positioned absolutely; doesn't intercept zrender events).
+  //   - A raf loop reads `playheadRef.current` (the hot-path ref) and
+  //     `chart.convertToPixel` — the latter automatically reflects the
+  //     current x-axis range, so the overlay tracks both playhead and
+  //     viewport changes without separate listeners.
+  //   - Cursor: `ew-resize` on a 14-px-wide invisible hit area; the
+  //     visible playhead is a thin dashed line in the middle.
+  // Drive the React-rendered playhead overlay's `style.left` via raf.
+  // The overlay div itself is rendered by the chart component (see
+  // `<ChartPlayheadOverlay />` below) so React owns its lifecycle and
+  // ECharts can't blow it away during layout passes.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || tMax <= 0) return undefined
+
+    let alive = true
+    let rafId = 0
+    let lastPx = -1
+
+    const tick = () => {
+      if (!alive) return
+      const chart = echartsRef.current?.getEchartsInstance?.()
+      if (!chart || chart.isDisposed?.()) {
+        rafId = requestAnimationFrame(tick)
+        return
+      }
+      const dom = chart.getDom?.()
+      const overlay = container.querySelector(`.${PLAYHEAD_OVERLAY_CLASS}`)
+      if (!dom || !overlay) {
+        rafId = requestAnimationFrame(tick)
+        return
+      }
+      const ph = useStore.getState().playheadRef.current
+      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [ph, 0])?.[0], null)
+      if (phX != null && isFinite(phX) && phX >= 0) {
+        const dRect = dom.getBoundingClientRect()
+        const cRect = container.getBoundingClientRect()
+        const finalX = (dRect.left - cRect.left) + phX
+        if (Math.abs(finalX - lastPx) >= 0.5) {
+          overlay.style.left = `${finalX}px`
+          overlay.style.top = `${dRect.top - cRect.top}px`
+          overlay.style.height = `${dRect.height - 24}px`
+          overlay.style.display = 'block'
+          lastPx = finalX
+        }
+      } else if (lastPx !== -1) {
+        overlay.style.display = 'none'
+        lastPx = -1
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+
+    return () => {
+      alive = false
+      if (rafId) cancelAnimationFrame(rafId)
+    }
+  }, [tMax, echartsRef, containerRef])
+
+  // resize observer → chart.resize()
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return undefined
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        const chart = echartsRef.current?.getEchartsInstance?.()
+        if (chart) safe(() => chart.resize())
+      })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [containerRef, echartsRef])
+
+  // Pointer gestures live in their own hook — see useChartGestures.
+  useChartGestures(echartsRef)
+
+  // dataZoom event → setViewport
+  return useCallback((params) => {
+    if (ignoreNextRef.current) {
+      ignoreNextRef.current = false
+      return
+    }
+    if (tMax <= 0) return
+    const z = params.batch ? params.batch[0] : params
+    const startPct = z.start ?? 0
+    const endPct = z.end ?? 100
+    setViewport({
+      tStart: (startPct / 100) * tMax,
+      tEnd: (endPct / 100) * tMax,
+    })
+  }, [tMax, setViewport])
+}
+
+/**
+ * Viewport auto-follow.
+ *
+ * When the user has zoomed into a sub-range (viewport width < lap duration),
+ * keep the playhead inside the visible window during playback. As the
+ * playhead enters the trailing 10 % of the viewport, shift `tStart`/`tEnd`
+ * forward just enough to hold the playhead at that 10 % margin — so the
+ * marker visibly "stops" at 90 % of the viewport and the chart starts
+ * sliding under it instead of letting it drift off the right edge.
+ *
+ * The mirror case (playhead crossing into the leading 10 % — typically
+ * after a manual rewind) shifts the viewport leftward.
+ *
+ * Only fires while `playing` is true. When paused — including during
+ * scrub / sector-jump / click-to-seek — the viewport is left alone so the
+ * user can zoom in around a feature and inspect it without the window
+ * yanking itself away. The viewport-effect in `useEchartsTimeSync` already
+ * mirrors `setViewport` to both charts via `dispatchAction(dataZoom)`.
+ *
+ * Subscribed via `useStore.subscribe` (not RAF) and gated on `playhead`
+ * actually changing, so the listener only runs at the throttled 15 Hz of
+ * the playhead state, not 60 Hz of RAF.
+ */
+const FOLLOW_MARGIN_FRAC = 0.10  // playhead "sticks" at 10 % from the trailing edge
+
+export function useViewportAutoFollow() {
+  useEffect(() => {
+    return useStore.subscribe((state, prev) => {
+      if (state.playhead === prev.playhead) return    // only react to clock ticks
+      if (!state.playing) return                       // paused — leave viewport alone
+      const { viewport: vp, duration: dur, playhead: ph } = state
+      const width = vp.tEnd - vp.tStart
+      if (dur <= 0 || width <= 0) return
+      // Skip when already showing the whole lap — there's nothing to follow.
+      if (width >= dur - 1e-3) return
+
+      const margin = width * FOLLOW_MARGIN_FRAC
+      let nextStart = vp.tStart
+      let nextEnd = vp.tEnd
+      if (ph > vp.tEnd - margin) {
+        // Slide forward: keep playhead at (tEnd - margin).
+        const shift = ph + margin - vp.tEnd
+        nextStart += shift
+        nextEnd += shift
+      } else if (ph < vp.tStart + margin) {
+        // Slide backward (e.g. after a rewind): keep playhead at (tStart + margin).
+        const shift = ph - margin - vp.tStart
+        nextStart += shift
+        nextEnd += shift
+      } else {
+        return
+      }
+
+      // Clamp at lap boundaries — never let the viewport spill past
+      // [0, duration].
+      if (nextEnd > dur) { nextEnd = dur; nextStart = dur - width }
+      if (nextStart < 0) { nextStart = 0; nextEnd = width }
+      state.setViewport({ tStart: nextStart, tEnd: nextEnd })
+    })
+  }, [])
+}
+
+/**
+ * Track whether the user is currently dragging a layout-panel separator
+ * and mark `<body>` with the `panel-resizing` class for the duration.
+ *
+ * Why our own tracker instead of `react-resizable-panels`'
+ * `data-separator="active"` attribute: that flag flips back to `inactive`
+ * MID-DRAG when the cursor crosses back past its starting position (e.g.
+ * a left-then-right drag without releasing the mouse), even though the
+ * pointer is still held down. The CSS rule that mutes charts during a
+ * resize would then stop applying, ECharts' built-in tooltip / axisPointer
+ * / dataZoom handlers would re-engage, and the chart would visibly react
+ * mid-resize.
+ *
+ * This tracker latches on `pointerdown` whose target is anywhere inside a
+ * `[role="separator"]` element, and only releases on the matching
+ * `pointerup` (or pointercancel) anywhere on the page.
+ */
+export function usePanelResizeTracker() {
+  useEffect(() => {
+    let activeId = -1
+    const isSeparator = (el) => {
+      while (el && el !== document.body) {
+        if (el.getAttribute?.('role') === 'separator') return true
+        el = el.parentElement
+      }
+      return false
+    }
+    const onDown = (e) => {
+      if (e.button !== 0) return
+      if (!isSeparator(e.target)) return
+      activeId = e.pointerId
+      document.body.classList.add('panel-resizing')
+    }
+    const release = (e) => {
+      if (activeId === -1) return
+      if (e && e.pointerId !== activeId) return
+      activeId = -1
+      document.body.classList.remove('panel-resizing')
+    }
+    // Capture-phase so we win the latch race even if some other handler
+    // calls stopPropagation on the bubble side.
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('pointerup', release, true)
+    window.addEventListener('pointercancel', release, true)
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('pointerup', release, true)
+      window.removeEventListener('pointercancel', release, true)
+      document.body.classList.remove('panel-resizing')
+    }
+  }, [])
+}

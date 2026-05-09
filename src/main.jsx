@@ -27,6 +27,10 @@ function showErrorOverlay(title, detail) {
 }
 
 window.addEventListener('error', (e) => {
+  // Browsers fire this for the benign "ResizeObserver loop completed with
+  // undelivered notifications" warning when an observer's callback triggers
+  // a synchronous layout change. It's not a real crash; ignore.
+  if (e?.message?.includes?.('ResizeObserver loop')) return
   showErrorOverlay(
     `ERROR: ${e.message}`,
     `${e.error?.stack || ''}\n\nfile: ${e.filename}:${e.lineno}:${e.colno}\nua: ${navigator.userAgent}`,

@@ -281,6 +281,14 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
+  /* `min-height: 0` so the viewer-shell respects its parent's height
+     constraint instead of stretching to fit children. The flat 2x2
+     CSS Grid layout's row tracks need this to honour their fr ratios —
+     without it, chart canvas content forces the grid taller than the
+     viewport and the row splitter can't shrink the top row. */
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .loading {
@@ -669,178 +677,6 @@ body {
   font-family: monospace;
 }
 
-/* Gamification panel */
-.gamification-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-}
-
-.gami-rating {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.gami-grade {
-  font-size: 1.8rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.gami-grade-S { color: #ffd700; text-shadow: 0 0 12px rgba(255, 215, 0, 0.5); }
-.gami-grade-A { color: #4caf50; text-shadow: 0 0 8px rgba(76, 175, 80, 0.4); }
-.gami-grade-B { color: #42a5f5; }
-.gami-grade-C { color: #ff9800; }
-.gami-grade-D { color: #9e9e9e; }
-
-.gami-score {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #b7bfd8;
-}
-
-.gami-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.gami-stat {
-  display: grid;
-  grid-template-columns: 55px 1fr 36px;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-}
-
-.gami-stat-label {
-  color: #8892ab;
-}
-
-.gami-stat-val {
-  text-align: right;
-  font-family: monospace;
-  color: #b7bfd8;
-}
-
-.gami-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.gami-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-}
-
-.gami-bar-throttle { background: #4caf50; }
-.gami-bar-brake { background: #f44336; }
-.gami-bar-coast { background: #607d8b; }
-
-.gami-details {
-  display: flex;
-  gap: 12px;
-  font-size: 0.72rem;
-  color: #7b8399;
-}
-
-/* Zone popup */
-.zone-popup {
-  text-align: center;
-  padding: 6px 10px;
-  border-radius: 8px;
-  animation: zonePopIn 0.3s ease-out;
-}
-
-.zone-popup-great {
-  background: rgba(76, 175, 80, 0.15);
-  border: 1px solid rgba(76, 175, 80, 0.3);
-}
-
-.zone-popup-good {
-  background: rgba(66, 165, 245, 0.15);
-  border: 1px solid rgba(66, 165, 245, 0.3);
-}
-
-.zone-popup-early {
-  background: rgba(255, 152, 0, 0.15);
-  border: 1px solid rgba(255, 152, 0, 0.3);
-}
-
-.zone-popup-label {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #eef2ff;
-}
-
-.zone-popup-score {
-  font-size: 0.75rem;
-  font-family: monospace;
-  color: #b7bfd8;
-}
-
-/* Sector engineer tips */
-.sector-tips-panel {
-  position: absolute;
-  bottom: 300px;
-  left: 12px;
-  width: 280px;
-  padding: 10px 12px;
-  background: rgba(9, 11, 16, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
-  animation: tipsSlideIn 0.25s ease-out;
-}
-
-.sector-tips-header {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #ffb74d;
-  margin-bottom: 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 183, 77, 0.2);
-}
-
-.sector-tip {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #ccd3e8;
-}
-
-.sector-tip-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.sector-tip-text {
-  flex: 1;
-}
-
-@keyframes tipsSlideIn {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes zonePopIn {
-  from { transform: scale(0.7); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
 /* ============================================================
  * Mobile toolbar + drawers
  * ============================================================ */
@@ -1018,11 +854,6 @@ body {
   .data-panels-open .delta-playhead {
     width: 100%;
     height: auto;
-  }
-
-  /* Hide engineer-notes panel on mobile (it overlays the viewer awkwardly). */
-  .sector-tips-panel {
-    display: none;
   }
 
   /* Hide the 3D-anchored telemetry card on mobile — replaced by the fixed
@@ -1579,4 +1410,580 @@ body {
     height: 32px;
     font-size: 16px;
   }
+}
+
+/* ============================================================
+ * Layout grid + panel frame (react-resizable-panels integration).
+ * ============================================================ */
+
+.layout-grid {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #06080d;
+}
+
+.layout-group {
+  width: 100%;
+  height: 100%;
+}
+
+.panel-cell,
+.panel-cell-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.panel-handle-h,
+.panel-handle-v {
+  position: relative;
+  /* Subtle always-on tint so users can SEE the full 16-px hit zone
+     instead of aiming at the tiny `::after` dot and misclicking onto
+     the chart. The whole band is the resize target — make it visible. */
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.12s ease;
+  flex-shrink: 0;
+}
+/* While the user is dragging a layout-panel separator, mute all chart
+   pointer events. THREE redundant signals so we don't depend on any one
+   library/browser quirk:
+     1. `body.panel-resizing`           — set by `usePanelResizeTracker`
+        on `pointerdown` over a separator, cleared on `pointerup`
+        anywhere. Bulletproof manual latch.
+     2. `:has([role="separator"]:active)` — browser-native `:active` state
+        which persists between mousedown and mouseup on the original
+        target regardless of cursor position. Doesn't depend on any
+        library attribute.
+     3. `:has([data-separator="active"])` — react-resizable-panels' own
+        flag. We saw this can flip back to `inactive` mid-drag so we
+        don't rely on it alone, but include it as a third layer.
+   Pointer events on a parent cascade to children, so the inner canvas
+   (where ECharts' zrender, tooltip, axisPointer, dataZoom internals
+   listen) becomes inert too. */
+body.panel-resizing .echarts-for-react,
+:root:has([role="separator"]:active) .echarts-for-react,
+:root:has([data-separator="active"]) .echarts-for-react {
+  pointer-events: none;
+}
+/* Generous physical hit-target so a click anywhere in this band reliably
+   grabs the resize handle instead of leaking into the chart underneath.
+   The visible indicator is the `::after` pseudo (4 px × 28 px line in the
+   middle); the rest of the 16 px is transparent, so visually the layout
+   doesn't gain a thick bar even though the handle has real estate. */
+.panel-handle-h { width: 16px; cursor: col-resize; }
+.panel-handle-v { height: 16px; cursor: row-resize; }
+
+/* CSS-Grid flat layout splitters — same visual treatment as the
+   `react-resizable-panels` handles above, but they're absolutely-
+   positioned overlays inside the grid container, so a drag on either
+   one changes ONLY its own axis. No nested Group, no constraint
+   cascade, no cursor decoupling. */
+.grid-splitter-v,
+.grid-splitter-h {
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.12s ease;
+}
+.grid-splitter-v:hover,
+.grid-splitter-h:hover {
+  background: rgba(76, 175, 200, 0.45);
+}
+.grid-splitter-v::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.grid-splitter-h::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 2px;
+  width: 28px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.panel-handle-h:hover,
+.panel-handle-v:hover,
+.panel-handle-h[data-resize-handle-active],
+.panel-handle-v[data-resize-handle-active] {
+  background: rgba(76, 175, 200, 0.45);
+}
+.panel-handle-h::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 1px;
+  width: 2px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-50%);
+  border-radius: 1px;
+}
+.panel-handle-v::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  height: 2px;
+  width: 28px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+.panel-frame {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #0b0e14;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.panel-frame-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7b8399;
+}
+
+.panel-frame-title { line-height: 22px; }
+.panel-frame-actions { display: flex; gap: 4px; }
+
+.panel-frame-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 12px;
+  color: #5a6378;
+}
+
+/* TrackMap inside a panel — fill the entire body. The component now reads
+   its container size via ResizeObserver and resizes the canvases inline; the
+   only CSS we need is to make the wrapper fill and stack the two canvases. */
+.panel-trackmap {
+  width: 100%;
+  height: 100%;
+  background: rgba(9, 11, 16, 0.92);
+}
+.panel-trackmap .track-map-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  bottom: auto;
+  left: auto;
+}
+.panel-trackmap .track-map-canvas,
+.panel-trackmap .track-map-dot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Layout preset bar — top of the side rail */
+.layout-preset-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.layout-preset-btn {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.03);
+  color: #8892ab;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.layout-preset-btn:hover { background: rgba(255, 255, 255, 0.06); color: #cfd6e8; }
+.layout-preset-btn.is-active {
+  background: rgba(76, 175, 200, 0.18);
+  border-color: rgba(76, 175, 200, 0.55);
+  color: #cfe7ee;
+}
+
+/* Experimental mini-map overlay pinned in the top-left of the 3D viewer.
+   Pure overlay — no background fill, no border, no shadow, no blur.
+   Only the track contour drawn onto the canvas remains visible; the
+   rest of the box stays fully transparent so the 3D scene shows through
+   everywhere outside the actual track lines. */
+.viewer3d-minimap-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 240px;
+  height: 240px;
+  z-index: 2;
+  pointer-events: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.viewer3d-minimap-overlay > * {
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+/* Wipe every layer of chrome that the map ships with for normal panel use:
+   panel-frame box, .panel-trackmap dark fill, the track-map-panel border
+   and rounded corners. The canvas elements themselves draw on a fully
+   transparent surface, so once the chrome is gone only the outline shows. */
+.viewer3d-minimap-overlay .panel-frame,
+.viewer3d-minimap-overlay .panel-frame-body,
+.viewer3d-minimap-overlay .panel-trackmap,
+.viewer3d-minimap-overlay .track-map-panel {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+}
+.viewer3d-minimap-overlay .panel-frame-header { display: none; }
+/* Drop the lap-colour legend and the "click sector to jump" footer hint —
+   the user wants the contour only, no surrounding text labels. */
+.viewer3d-minimap-overlay .track-map-legend,
+.viewer3d-minimap-overlay .track-map-hint {
+  display: none !important;
+}
+
+/* ============================================================
+   Mobile presentation (`<MobileApp>`)
+   ------------------------------------------------------------
+   A completely separate layout from the desktop sidebar + grid.
+   Drives the .mobile-shell -> .mobile-body (active panel) ->
+   .mobile-playback-bar -> .mobile-tabbar -> .mobile-sheet stack.
+   ============================================================ */
+.mobile-shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  background: #090b10;
+  color: #cfd6e8;
+  overflow: hidden;
+}
+
+.mobile-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(20,24,32,0.95), rgba(12,14,20,0.85));
+  z-index: 2;
+}
+.mobile-header-title {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+}
+.mobile-header-sub {
+  font-family: monospace;
+  font-size: 11px;
+  color: rgba(207,214,232,0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Main body — holds whichever PANELS[activeTab] component is active.
+   `min-height: 0` is critical so the panel can shrink inside the grid
+   row instead of forcing the row taller (would happen with the chart
+   canvases otherwise). */
+.mobile-body {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: #090b10;
+}
+.mobile-body > * {
+  position: absolute;
+  inset: 0;
+}
+
+/* Persistent playback bar */
+.mobile-playback-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(14,16,22,0.96);
+  border-top: 1px solid rgba(255,255,255,0.05);
+  z-index: 2;
+}
+.mobile-pb-btn {
+  min-width: 44px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: #e9edf5;
+  font-size: 15px;
+  font-family: monospace;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mobile-pb-btn:active { background: rgba(76,175,200,0.18); }
+.mobile-pb-speed { min-width: 52px; font-weight: 700; }
+.mobile-pb-scrubber {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+  outline: none;
+}
+.mobile-pb-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4cafc8;
+  border: 2px solid #0a0c12;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.mobile-pb-scrubber::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4cafc8;
+  border: 2px solid #0a0c12;
+}
+.mobile-pb-time {
+  font-family: monospace;
+  font-size: 11px;
+  color: rgba(207,214,232,0.7);
+  min-width: 90px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Bottom tab bar */
+.mobile-tabbar {
+  display: flex;
+  background: rgba(8,10,15,0.98);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  z-index: 2;
+}
+.mobile-tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 56px;
+  background: transparent;
+  border: none;
+  color: rgba(207,214,232,0.55);
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 0 8px;
+  touch-action: manipulation;
+}
+.mobile-tab.is-active {
+  color: #ffffff;
+  box-shadow: inset 0 2px 0 0 #4cafc8;
+}
+.mobile-tab-icon { font-size: 18px; line-height: 1; }
+.mobile-tab-label {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Settings bottom sheet */
+.mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 50;
+}
+.mobile-sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  max-height: 85vh;
+  background: #11141b;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  transform: translateY(100%);
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.mobile-sheet.is-open { transform: translateY(0); }
+.mobile-sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.18);
+  margin: 8px auto 4px;
+  flex-shrink: 0;
+}
+.mobile-sheet-body {
+  overflow-y: auto;
+  padding: 8px 16px 16px;
+}
+.mobile-sheet-section { margin: 14px 0; }
+.mobile-sheet-section h3 {
+  font-family: monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(207,214,232,0.5);
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+.mobile-segctl {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  background: rgba(255,255,255,0.04);
+  padding: 4px;
+  border-radius: 10px;
+}
+.mobile-segctl-btn {
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: rgba(207,214,232,0.7);
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mobile-segctl-btn.is-active {
+  background: rgba(76,175,200,0.22);
+  color: #ffffff;
+}
+.mobile-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  background: rgba(255,255,255,0.04);
+  color: #e9edf5;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.mobile-laplist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mobile-lap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.mobile-lap-row input[type='checkbox'] {
+  accent-color: #4cafc8;
+  width: 18px;
+  height: 18px;
+}
+.mobile-lap-label {
+  font-family: monospace;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,0.04);
+  border: none;
+  border-radius: 8px;
+  color: #e9edf5;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mobile-toggle-row.is-active { background: rgba(76,175,200,0.22); }
+.mobile-toggle-pill {
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+}
+.mobile-toggle-row.is-active .mobile-toggle-pill {
+  background: #4cafc8;
+  color: #0a0c12;
+}
+.mobile-sheet-close {
+  width: 100%;
+  height: 44px;
+  margin-top: 8px;
+  background: rgba(255,255,255,0.06);
+  border: none;
+  border-radius: 10px;
+  color: #cfd6e8;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
 }
