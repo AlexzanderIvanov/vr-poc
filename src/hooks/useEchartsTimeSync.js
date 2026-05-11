@@ -226,11 +226,30 @@ export function useEchartsTimeSync(
  * Subscribed via `useStore.subscribe` (not RAF) and gated on `playhead`
  * actually changing, so the listener only runs at the throttled 15 Hz of
  * the playhead state, not 60 Hz of RAF.
+ *
+ * Wall-clock throttle: even at 15 Hz, every fired `setViewport` triggers
+ * a `dataZoom` dispatchAction on every chart instance (2+ charts, each a
+ * multi-grid ECharts canvas), plus a re-render of the TrackMap SVG.
+ * Empirically that's 15-30 ms of main-thread work per call — 75% of the
+ * frame budget at 15 Hz, which starves the 3D `useFrame` and produces a
+ * choppy ghost car in any narrow viewport (i.e. while a sector is
+ * selected). The ref car looks fine because `CameraRig` smooths its
+ * pose with a ~2.2 Hz exp filter and absorbs frame-timing variance; the
+ * ghost has no such filter (we removed it for direct-response chase
+ * sync) and exposes every dropped frame as a visible position jump.
+ *
+ * We rate-limit `setViewport` to `MIN_SHIFT_MS` ms. At 1×–2× speed the
+ * playhead drifts at most ~0.4 s in that window — well inside the
+ * margin so it never visually leaves the viewport. At >4× speed the
+ * playhead may briefly hit the trailing edge between shifts, which is
+ * acceptable.
  */
 const FOLLOW_MARGIN_FRAC = 0.10  // playhead "sticks" at 10 % from the trailing edge
+const MIN_SHIFT_MS = 200          // viewport auto-shift rate ceiling (5 Hz)
 
 export function useViewportAutoFollow() {
   useEffect(() => {
+    let lastShiftAt = 0
     return useStore.subscribe((state, prev) => {
       if (state.playhead === prev.playhead) return    // only react to clock ticks
       if (!state.playing) return                       // paused — leave viewport alone
@@ -256,6 +275,13 @@ export function useViewportAutoFollow() {
       } else {
         return
       }
+
+      // Rate-limit the actual `setViewport` call. The shift math above
+      // always runs (cheap), but firing the state update — which fans
+      // out to ECharts dataZoom + TrackMap re-render — is throttled.
+      const now = performance.now()
+      if (now - lastShiftAt < MIN_SHIFT_MS) return
+      lastShiftAt = now
 
       // Clamp at lap boundaries — never let the viewport spill past
       // [0, duration].

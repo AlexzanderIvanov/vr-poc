@@ -29,19 +29,52 @@ export { computeGForces } from '../utils/gForces'
  *
  * Method:
  *   1. Central-difference horizontal (XZ) positions → raw ground-plane
- *      speed.  Y is intentionally skipped: `smoothSamplePositionsXZ` only
- *      smooths X and Z, so the vertical channel still carries 2–3 m of
- *      raw GPS jitter — folding it into the speed differentiator turned
- *      that into 10–20 km/h waves on the chart. Track elevation does
- *      contribute a real component to ground speed, but the horizontal
- *      approximation is the convention for racing telemetry and what
- *      AIM / RaceStudio reports.
- *   2. Moving-average post-smoothing (window matches `computeGForces`).
- *      Differentiation amplifies whatever residual position noise is
- *      left after the Savitzky-Golay XZ smoother; without a post-pass
- *      the chart was visibly choppy at every sample.
+ *      speed.  Y is intentionally skipped: even after the load-time
+ *      smoothing of `smoothSamplePositionsXZ` (which now applies a wider
+ *      triangular window to Y for visual purposes), absolute vertical
+ *      accuracy is still poorer than horizontal — folding it into the
+ *      speed differentiator was producing 10–20 km/h waves on the chart.
+ *      Track elevation does contribute a real component to ground speed,
+ *      but the horizontal approximation is the convention for racing
+ *      telemetry and what AIM / RaceStudio reports.
+ *
+ *   2. Two flat moving-average passes (cascaded).
+ *      A single flat MA reduces variance by `1/N`, but its frequency
+ *      response is a sinc with ~-13 dB first-side-lobe — content in
+ *      that lobe survives as visible wiggle. Cascading two MAs is
+ *      equivalent to a TRIANGULAR window, whose response is sinc² —
+ *      side-lobes are squared, so they drop to ~-26 dB. At the same
+ *      total filter length, the triangular response gives
+ *      dramatically cleaner stopband than flat-MA with no extra
+ *      compute cost worth worrying about (each pass is O(N) and N is
+ *      ~2000).
+ *
+ *      Window 9 + window 9 → effective length 17 samples = 0.85 s at
+ *      20 Hz. Real brake events (>1 s typical) survive intact; the
+ *      0.5-1 km/h sample-to-sample chop that GPS noise produces after
+ *      the position smoother is cleanly suppressed.
+ *
+ *      We tried Savitzky-Golay 7-cubic here first — but its negative
+ *      end-coefficients (-2, 3, 6, 7, 6, 3, -2) act like a partial
+ *      differentiator on white-ish noise, so noise variance actually
+ *      INCREASED ~2× vs flat MA-7. SG is the right tool when you must
+ *      preserve cubic shape, wrong tool when you want max noise
+ *      rejection at a given window length.
  */
-const SPEED_SMOOTH_WINDOW = 7   // odd; ~0.35 s at 20 Hz
+const PASS_WINDOW = 9
+const PASS_HALF = (PASS_WINDOW - 1) >> 1
+
+// In-place centred moving average. Edges average over the available
+// window (shrinks symmetrically) so endpoints don't jump.
+function movingAverageInPlace(src, dst, n) {
+  for (let i = 0; i < n; i++) {
+    let sum = 0, cnt = 0
+    const lo = Math.max(0, i - PASS_HALF)
+    const hi = Math.min(n - 1, i + PASS_HALF)
+    for (let j = lo; j <= hi; j++) { sum += src[j]; cnt++ }
+    dst[i] = sum / cnt
+  }
+}
 
 export function computeGpsSpeed(samples) {
   if (!samples?.length) return null
@@ -59,18 +92,16 @@ export function computeGpsSpeed(samples) {
     raw[i] = Math.hypot(dx, dz) / dt
   }
 
-  // Step 2: moving-average smoothing. Same pattern `computeGForces` uses
-  // after its second differentiation — keeps the visible signal stable
-  // without losing brake-zone fidelity (window is ~0.35 s, well below
-  // typical brake-event duration).
-  const half = (SPEED_SMOOTH_WINDOW - 1) >> 1
+  // Step 2: cascade two moving-average passes (triangular-window equivalent).
+  const pass1 = new Float32Array(n)
+  movingAverageInPlace(raw, pass1, n)
+  const pass2 = new Float32Array(n)
+  movingAverageInPlace(pass1, pass2, n)
+
+  // Step 3: pack into `[t, kmh]` tuples — m/s × 3.6 → km/h.
   const out = new Array(n)
   for (let i = 0; i < n; i++) {
-    let sum = 0, cnt = 0
-    const lo = Math.max(0, i - half)
-    const hi = Math.min(n - 1, i + half)
-    for (let j = lo; j <= hi; j++) { sum += raw[j]; cnt++ }
-    out[i] = [samples[i].t, (sum / cnt) * 3.6]
+    out[i] = [samples[i].t, pass2[i] * 3.6]
   }
   return out
 }

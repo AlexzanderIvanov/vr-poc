@@ -29,11 +29,17 @@ export const CHANNEL_DEFS = {
   g_sum:  { kind: 'imu', shape: 'scalar', unit: 'g', signed: false, derivable: true },
 
   // ─── vehicle (CAN / ECU) ───────────────────────────────────────────────
-  tps:   { kind: 'vehicle', shape: 'scalar', range: [0, 255] },
-  fbp:   { kind: 'vehicle', shape: 'scalar', range: [0, 150] },
-  rbp:   { kind: 'vehicle', shape: 'scalar', range: [0, 150] },
-  rpm:   { kind: 'vehicle', shape: 'scalar', range: [0, 8000] },
-  steer: { kind: 'vehicle', shape: 'scalar', range: [-250, 250], signed: true },
+  // Units are intrinsic to the channel: the data layer never converts
+  // vehicle channels (they arrive in their raw AIM units from the
+  // datalogger) so chart code can render them as-is. Anything that
+  // displays a channel value should read its unit from `CHANNEL_DEFS`
+  // rather than hardcode the suffix — keeps the unit consistent across
+  // tooltips, axis labels, value readouts, and future printable reports.
+  tps:   { kind: 'vehicle', shape: 'scalar', range: [0, 255],          unit: '' },     // raw AIM pedal position
+  fbp:   { kind: 'vehicle', shape: 'scalar', range: [0, 150],          unit: 'bar' },  // front-brake pressure
+  rbp:   { kind: 'vehicle', shape: 'scalar', range: [0, 150],          unit: 'bar' },  // rear-brake pressure
+  rpm:   { kind: 'vehicle', shape: 'scalar', range: [0, 8000],         unit: 'rpm' },
+  steer: { kind: 'vehicle', shape: 'scalar', range: [-250, 250],       unit: '°', signed: true },
 }
 
 /** Channels each device class natively provides or has derived for it. */

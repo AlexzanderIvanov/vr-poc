@@ -16,8 +16,24 @@ import * as THREE from 'three'
 // sample* helpers below. Was previously exported but no external module
 // imports it; keeping it un-exported lets the bundler tree-shake calls
 // to its dead-code branches without uplifting the whole symbol.
-function catmullRom(p0, p1, p2, p3, t, tension = 0.5) {
-  // tension 0 = standard CR, tension 1 = linear (no overshoot)
+function catmullRom(p0, p1, p2, p3, t, tension = 0) {
+  // tension 0 = standard Catmull-Rom (k=0.5, uniform velocity on uniform samples)
+  // tension 1 = linear (no overshoot, no smooth velocity)
+  //
+  // ⚠ The previous default was tension 0.5 (k=0.25) — that's a "stiff" CR
+  // that DOES NOT preserve uniform velocity even on perfectly uniform
+  // input. On our 20 Hz lap samples interpolated to 60 fps, k=0.25
+  // produces a 3 Hz pulse in step magnitude (mid-segment frames advance
+  // ~40 % more than boundary-crossing frames). The ref car hides this
+  // because `CameraRig` exp-smooths the chase camera at 2.2 Hz — the
+  // camera tracks the pulse partially and the on-screen residual is
+  // small. But a ghost car spatially OFFSET from the ref (e.g. after a
+  // sector ≥ 2 jump in time-compare mode) is no longer at the camera's
+  // focus, so the full 12 cm of pulse shows up as visible 3 Hz wobble.
+  // Standard CR (tension 0, k=0.5) interpolates linearly through
+  // collinear uniform samples and produces uniform velocity. Verified
+  // algebraically: with P0=0, P1=1, P2=2, P3=3 and k=0.5, the polynomial
+  // collapses to position(α) = 1 + α — perfectly linear.
   const k = (1 - tension) * 0.5
   const t2 = t * t
   const t3 = t2 * t

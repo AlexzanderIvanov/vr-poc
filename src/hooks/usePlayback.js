@@ -1,70 +1,29 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useStore } from '../state/store'
 
 /**
- * Playback loop driven by requestAnimationFrame.
+ * Playback lifecycle hook — kept as a thin shim for backward compatibility
+ * with `useAppInit` callers.
  *
- * Reads `playing`, `speed`, `duration` from the store via per-slice selectors;
- * mutates `playheadRef.current` (hot-path) every frame and emits a throttled
- * React-state update (~15 Hz) so charts / HUD numerics tick without a
- * per-frame reconciliation cascade.
+ * The actual frame-by-frame advance now lives inside the Canvas in
+ * `<PlaybackClock />` (priority −100 `useFrame`), which gives the scene
+ * and the playhead a single shared clock. See `PlaybackClock.jsx` for the
+ * rationale.
  *
- * Sector-end one-shot: if `sectorEndRef.current` is set (sector-jump flow),
- * playback stops at that time and clears the ref.
+ * The only remaining responsibility is flushing `playheadRef.current` into
+ * React state when playback pauses, so any subscriber that was reading the
+ * throttled 15 Hz mirror finishes on the exact final time the user stopped
+ * at (rather than ~67 ms behind).
  */
-export function usePlayback({ uiUpdateHz = 15 } = {}) {
+export function usePlayback() {
   const playing = useStore((s) => s.playing)
-  const speed = useStore((s) => s.speed)
-  const duration = useStore((s) => s.duration)
-  const rafRef = useRef(0)
 
   useEffect(() => {
-    if (!playing || duration <= 0) return undefined
-
-    const playheadRef = useStore.getState().playheadRef
-    const sectorEndRef = useStore.getState().sectorEndRef
-    const setPlaying = useStore.getState().setPlaying
-    const setPlayheadState = (v) => useStore.setState({ playhead: v })
-
-    let previous = performance.now()
-    let lastUi = previous
-    const uiInterval = 1000 / uiUpdateHz
-    let stopped = false
-
-    const tick = (now) => {
-      if (stopped) return
-      const delta = (now - previous) / 1000
-      previous = now
-
-      let next = playheadRef.current + delta * speed
-
-      const endT = sectorEndRef.current
-      if (endT != null && next >= endT) {
-        playheadRef.current = endT
-        setPlayheadState(endT)
-        stopped = true
-        sectorEndRef.current = null
-        requestAnimationFrame(() => setPlaying(false))
-        return
-      }
-      if (next > duration) next = next % duration
-
-      playheadRef.current = next
-
-      if (now - lastUi >= uiInterval) {
-        lastUi = now
-        setPlayheadState(next)
-      }
-
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      stopped = true
-      cancelAnimationFrame(rafRef.current)
-      // Flush the final ref value into state so the UI isn't a frame behind.
-      setPlayheadState(playheadRef.current)
-    }
-  }, [playing, speed, duration, uiUpdateHz])
+    if (playing) return undefined
+    // Just paused — flush the latest hot-path time so UI subscribers settle
+    // on the precise stop frame.
+    const { playheadRef } = useStore.getState()
+    useStore.setState({ playhead: playheadRef.current })
+    return undefined
+  }, [playing])
 }

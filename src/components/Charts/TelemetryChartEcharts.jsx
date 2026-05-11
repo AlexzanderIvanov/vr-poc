@@ -8,6 +8,7 @@ import {
   totalArcLength,
 } from '../../utils/arcLength'
 import { useLapColorMap } from '../../hooks/useLapColor'
+import { CHANNEL_DEFS } from '../../services/channelCatalog'
 
 /**
  * Multi-series telemetry chart (TPS / BRAKE / SPEED / STEER) using ECharts.
@@ -52,16 +53,37 @@ const seriesFromSamples = (key) => (lap, tel) =>
 // recolour propagates everywhere on one render. Channels are identified
 // by row position + the persistent left-corner label (`<ChartValueLabels
 // rowName>`), not by stroke colour.
+//
+// `channelKey` references the catalogue entry in
+// `services/channelCatalog.js` — that's the single source of truth for
+// each channel's unit, range, and whether the value is signed. The
+// chart itself does no unit conversion (the data layer handles that:
+// `computeGpsSpeed` returns km/h, AIM vehicle channels arrive in their
+// raw on-wire units). Add a new chart row by registering its channel in
+// the catalogue with the right unit, then referencing it here — the
+// row name, the y-axis range, the tooltip suffix and the value-label
+// suffix all pick up the unit automatically.
 const SERIES_DEFS = [
-  { key: 'tps',   label: 'TPS',   max: 255, format: fmtInt,
+  { channelKey: 'tps',       label: 'TPS',   max: 255, format: fmtInt,
     getSeries: seriesFromSamples('tps') },
-  { key: 'fbp',   label: 'BRAKE', max: 150, format: fmtInt,
+  { channelKey: 'fbp',       label: 'BRAKE', max: 150, format: fmtInt,
     getSeries: seriesFromSamples('fbp') },
-  { key: 'speed', label: 'SPEED', max: 250, format: fmtInt,
+  { channelKey: 'gps_speed', label: 'SPEED', max: 250, format: fmtInt,
     getSeries: (lap) => lap?.gpsSpeed ?? [] },
-  { key: 'steer', label: 'STEER', signed: true, max: 250, format: fmtSigned,
+  { channelKey: 'steer',     label: 'STEER', signed: true, max: 250, format: fmtSigned,
     getSeries: seriesFromSamples('steer') },
 ]
+
+/** Look up the catalogue entry's unit for a series def. Returns '' for
+ *  channels whose value is unit-less (raw AIM TPS, 0–255). */
+const unitFor = (def) => CHANNEL_DEFS[def.channelKey]?.unit ?? ''
+
+// Decimal-rounding helper used by the hover tooltip — independent of the
+// integer-format used for the always-visible value labels at the top of
+// each row. The tooltip shows two decimals so the user can see fine
+// detail when hovering; the always-on label uses `def.format` so it stays
+// quick to read at a glance.
+const fmt2 = (v) => Number.isFinite(v) ? v.toFixed(2) : '—'
 
 // Row-name colour — a soft neutral so it doesn't fight the per-lap series
 // colours below it. Same for both modes.
@@ -109,7 +131,10 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
   const valueProviders = useMemo(
     () => SERIES_DEFS.map((def, i) => ({
       gridIndex: i,
-      rowName: def.label,
+      // Row name carries the unit (`SPEED km/h`, `BRAKE bar`, `STEER °`)
+      // so the always-on top-left label is self-describing — no need to
+      // hover the tooltip to learn what "108" means.
+      rowName: unitFor(def) ? `${def.label} ${unitFor(def)}` : def.label,
       rowNameColor: ROW_NAME_COLOR,
       getLines: (x) => {
         // `x` is whatever the chart's x-axis represents — seconds in time
@@ -167,7 +192,11 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
           data: xMapped,
           showSymbol: false,
           symbol: 'none',
-          sampling: 'lttb',
+          // sampling: 'lttb' — disabled; ECharts' axis-trigger tooltip
+          // only returns one series per axis when LTTB downsampling is
+          // active, so we lose the cross-lap comparison the tooltip is
+          // meant to show. Data is small enough (~2300 samples per lap)
+          // to render without downsampling at the chart sizes we use.
           lineStyle: {
             color: lapColor,
             width: isGhost ? 1.1 : 1.5,
@@ -197,12 +226,62 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
         backgroundColor: 'rgba(9, 11, 16, 0.92)',
         borderColor: 'rgba(255,255,255,0.12)',
         textStyle: { color: '#cfd6e8', fontSize: 11 },
-        // axisPointer.type 'none' suppresses the vertical hover line —
-        // we already render our own playhead overlay (`ChartPlayheadOverlay`)
-        // and a second crosshair on hover competes with it visually.
-        // The tooltip box still pops as the user moves the cursor; just
-        // the line is gone.
-        axisPointer: { type: 'none', label: { show: false } },
+        // axisPointer.type MUST be 'line' (not 'none') for ECharts' axis
+        // trigger to aggregate ALL series at the cursor's x. With 'none',
+        // the tooltip falls back to single-series picking — that's why
+        // the SPEED tooltip only ever showed one lap. We want both laps
+        // listed, but we don't want a visible crosshair line (our own
+        // playhead overlay already shows the user's position). So the
+        // axisPointer line is here but completely transparent + zero-
+        // width; ECharts still uses it for series picking.
+        axisPointer: {
+          type: 'line',
+          label: { show: false },
+          // Width must stay >0 (otherwise ECharts disables cross-series
+          // picking entirely and the tooltip falls back to single-series
+          // mode — the very bug we're fixing). Hide the line with full
+          // transparency instead.
+          lineStyle: { color: 'rgba(0,0,0,0)', width: 1, opacity: 0 },
+          shadowBlur: 0,
+        },
+        // Custom formatter: list every series ECharts found in the
+        // hovered ROW (`params` contains only series whose xAxisIndex
+        // matches the hovered grid), round values to 2 decimals, append
+        // the channel's unit. The header echoes the x-axis units
+        // explicitly (`s` for time mode, `km` for distance mode) so the
+        // tooltip is fully self-describing.
+        formatter: (params) => {
+          if (!Array.isArray(params) || !params.length) return ''
+          const xVal = params[0]?.axisValue
+          const xStr = byDistance
+            ? `${(xVal ?? 0).toFixed(2)} m`
+            : `${(xVal ?? 0).toFixed(2)} s`
+          // `axisIndex` is the grid (= channel) index — TelemetryChart
+          // builds one grid per `SERIES_DEFS` entry in order, so it maps
+          // 1:1 to the channel definition.
+          const def = SERIES_DEFS[params[0]?.axisIndex ?? 0] || SERIES_DEFS[0]
+          const unit = unitFor(def) ? ` ${unitFor(def)}` : ''
+          const rows = params.map((p) => {
+            const v = Array.isArray(p.value) ? p.value[1] : p.value
+            // Trim `${def.label} · ` prefix so the tooltip shows only the
+            // lap name (channel is in the header).
+            const lapName = (p.seriesName || '').split('·').slice(1).join('·').trim()
+              || p.seriesName
+            return (
+              `<div style="display:flex;align-items:center;gap:8px">`
+              + `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};flex-shrink:0"></span>`
+              + `<span style="opacity:0.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${lapName}</span>`
+              + `<span style="margin-left:auto;font-family:monospace;font-weight:600">${fmt2(v)}${unit}</span>`
+              + `</div>`
+            )
+          }).join('')
+          return (
+            `<div style="font-family:monospace;font-size:11px;min-width:240px">`
+            + `<div style="opacity:0.7;margin-bottom:4px">${def.label}${unit ? ` · ${unit}` : ''} @ ${xStr}</div>`
+            + rows
+            + `</div>`
+          )
+        },
       },
       xAxis: SERIES_DEFS.map((_, i) => ({
         type: 'value',

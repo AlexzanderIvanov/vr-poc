@@ -17,6 +17,7 @@ import { CornerMarkers } from './CornerMarkers'
 import { CornerApexLayer } from './CornerApexLayer'
 import { CarEntity } from './CarEntity'
 import { CameraRig } from './CameraRig'
+import { PlaybackClock } from './PlaybackClock'
 import { useLapColor } from '../../hooks/useLapColor'
 
 /**
@@ -151,6 +152,10 @@ export function Viewer() {
     >
       <color attach="background" args={["#b8ccd8"]} />
       <fog attach="fog" args={["#b8ccd8", 400, 2400]} />
+      {/* Drives `playheadRef.current` once per frame BEFORE every other
+          useFrame callback (priority −100). Single clock for the whole
+          scene — see PlaybackClock.jsx. */}
+      <PlaybackClock />
       <PerspectiveCamera makeDefault position={initialCamera.pos} fov={48} ref={(c) => { if (c) { c.lookAt(...initialCamera.look); c.updateMatrixWorld(true) } }} />
       <OrbitControls ref={orbitControlsRef} enabled={cameraMode === 'free'} enableDamping dampingFactor={0.08} maxPolarAngle={Math.PI / 2 - 0.05} />
       <CameraRig cameraMode={cameraMode} focusRef={focusRef} controlsRef={orbitControlsRef} cameraInitRef={cameraInitRef} laps={laps} snapRequestRef={cameraSnapRequestRef} liftView={liftViewForVideo} />

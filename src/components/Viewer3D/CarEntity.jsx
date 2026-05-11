@@ -125,8 +125,6 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
     return () => onTargetReady(lap.id, null)
   }, [lap.id, onTargetReady])
 
-  const smoothedPosRef = useRef(null)
-  const smoothedQuatRef = useRef(null)
   const positionHintIdxRef = useRef(null)
   const scratchPos1Ref = useRef(new THREE.Vector3())
   const scratchPos2Ref = useRef(new THREE.Vector3())
@@ -139,6 +137,14 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
   const hasTelemetry = !!telemetry?.samples?.length
   const showDeltaBadge = !hideDelta && isRefLap && !!otherLap?.samples?.length
 
+  // Priority −10: runs AFTER PlaybackClock (−100) but BEFORE CameraRig (0).
+  // Critical for visual smoothness — CameraRig reads `group.getWorldPosition`
+  // to frame the chase camera. If the car updated AFTER the camera in the
+  // same frame, the camera would frame yesterday's position (1-frame lag),
+  // which the eye perceives as the camera lurching to catch the car. With
+  // the negative priority, the car body is updated first, then CameraRig
+  // reads the up-to-date world position via `getWorldPosition` (which calls
+  // `updateMatrixWorld()` on demand).
   useFrame(({ camera }, delta) => {
     if (!groupRef.current) return
     const playheadTime = currentTimeRef?.current ?? 0
@@ -159,23 +165,24 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
       liveTime = playheadTime + (lapTimeOffset ?? 0)
     }
 
+    // Sample the lap directly into the group's transform.
+    //
+    // No post-filter: `sampleLapInto` runs Catmull-Rom over samples that
+    // were already Savitzky-Golay smoothed at load (`utils/smoothing.js`).
+    // The previous 8 Hz one-pole IIR added ~20 ms of phase lag for zero
+    // visual benefit — Catmull-Rom is C¹-continuous on smooth input, so
+    // the rendered position is already a smooth function of playhead time.
+    //
+    // The visible payoff: scrubbing snaps instantly, the car no longer
+    // "drags" behind the chart playhead, and motion is exactly in sync
+    // with the single playback clock above (PlaybackClock).
     const targetPos = scratchPos1Ref.current
     const targetQuat = scratchQuat1Ref.current
     if (!sampleLapInto(lap.samples, liveTime, targetPos, targetQuat)) return
     applySyncOffsetInPlace(targetPos, targetQuat, syncOffset)
 
-    if (!smoothedPosRef.current) {
-      smoothedPosRef.current = targetPos.clone()
-      smoothedQuatRef.current = targetQuat.clone()
-    }
-
-    const fc = 8
-    const alpha = 1 - Math.exp(-delta * 2 * Math.PI * fc)
-    smoothedPosRef.current.lerp(targetPos, alpha)
-    smoothedQuatRef.current.slerp(targetQuat, alpha)
-
-    groupRef.current.position.copy(smoothedPosRef.current)
-    groupRef.current.quaternion.copy(smoothedQuatRef.current)
+    groupRef.current.position.copy(targetPos)
+    groupRef.current.quaternion.copy(targetQuat)
 
     const tel = telemetry ? sampleTelemetry(telemetry.samples, liveTime) : null
     const steerCenter = steerCenterRef.current
@@ -198,7 +205,7 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
     }
 
     if (hudRef.current) {
-      const dist = camera.position.distanceTo(smoothedPosRef.current)
+      const dist = camera.position.distanceTo(targetPos)
       const HUD_MIN_DIST = 3
       const HUD_FULL_DIST = 10
       const tDist = THREE.MathUtils.clamp((dist - HUD_MIN_DIST) / (HUD_FULL_DIST - HUD_MIN_DIST), 0, 1)
@@ -257,7 +264,7 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
         }
       }
     }
-  })
+  }, -10)
 
   return (
     <group ref={groupRef} visible={visible}>
