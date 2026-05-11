@@ -1,6 +1,12 @@
 # Dependencies
 node_modules/
 
+# Build artifacts — rebuilt by Vite in CI (Dockerfile runs `npm run build`),
+# so tracking the output here would only mean stale committed copies.
+# Anchored with a leading slash so the rule matches only the top-level
+# `dist/` directory.
+/dist/
+
 # Raw/source video processing folders (contain files >100MB; GitHub hard limit).
 # Anchored with a leading slash so the rule only matches the top-level
 # directories — without the slash this pattern also matched

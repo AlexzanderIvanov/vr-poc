@@ -97,8 +97,10 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
   // hex the trace uses.
   const seriesByGrid = useMemo(() => {
     const lapsWithTel = laps.filter((l) => telemetryData[l.id]?.samples?.length)
-    return SERIES_DEFS.map((def) => lapsWithTel.map((lap, lapIdx) => ({
-      isGhost: lapIdx > 0,
+    // `isGhost` is driven by the manifest flag — the reference lap is
+    // whichever one carries `ghost: false`, independent of array order.
+    return SERIES_DEFS.map((def) => lapsWithTel.map((lap) => ({
+      isGhost: !!lap.ghost,
       color: lapColorMap[lap.id],
       data: mapXForLap(lap)(def.getSeries(lap, telemetryData[lap.id])),
     })))
@@ -153,9 +155,9 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
     if (!lapsWithTel.length || xMax <= 0) return null
     const seriesData = []
     SERIES_DEFS.forEach((def, i) => {
-      lapsWithTel.forEach((lap, lapIdx) => {
+      lapsWithTel.forEach((lap) => {
         const tel = telemetryData[lap.id]
-        const isGhost = lapIdx > 0
+        const isGhost = !!lap.ghost
         const rawData = def.getSeries(lap, tel)
         const xMapped = mapXForLap(lap)(rawData)
         const lapColor = lapColorMap[lap.id]

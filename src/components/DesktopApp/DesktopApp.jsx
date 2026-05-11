@@ -6,9 +6,9 @@ import { CornerAnalysisPanel } from '../Corners/CornerAnalysisPanel'
 import { LapSyncControls } from '../HUD/LapSyncControls'
 import { LoadingOverlay } from '../HUD/LoadingOverlay'
 import { TimeScrubber } from '../HUD/TimeScrubber'
-import { VideoOverlay } from '../Video/VideoOverlay'
 import { LayoutGrid, LayoutPresetBar } from '../Layout/LayoutGrid'
 import { PersistentViewer3D } from '../Viewer3D/PersistentViewer3D'
+import { Viewer3DErrorBoundary } from '../Viewer3D/Viewer3DErrorBoundary'
 
 const MODE_LABELS = {
   standard: 'Standard',
@@ -96,8 +96,6 @@ export function DesktopApp() {
   const syncOffsets         = useStore((s) => s.syncOffsets)
   const compareMode         = useStore((s) => s.compareMode)
   const cornerAnalysisMode  = useStore((s) => s.cornerAnalysisMode)
-  const videoOverlayOn      = useStore((s) => s.videoOverlayOn)
-  const sectorStartTime     = useStore((s) => s.sectorStartTime)
 
   // ---------- store actions ----------
   const setPlaying          = useStore((s) => s.setPlaying)
@@ -108,7 +106,6 @@ export function DesktopApp() {
   const setSyncOffsets      = useStore((s) => s.setSyncOffsets)
   const setCompareMode      = useStore((s) => s.setCompareMode)
   const setCornerAnalysisMode = useStore((s) => s.setCornerAnalysisMode)
-  const setVideoOverlayOn   = useStore((s) => s.setVideoOverlayOn)
 
   // ---------- shared data pipes ----------
   const cornerData          = useCornerAnalysisData()
@@ -151,25 +148,10 @@ export function DesktopApp() {
         <button className="mtb-btn mtb-btn-text" aria-label={`Camera ${cameraMode} — tap to cycle`} onClick={cycleCamera}>{CAMERA_LABELS[cameraMode] || cameraMode.toUpperCase().slice(0, 4)}</button>
         <button className="mtb-btn mtb-btn-text" aria-label={`Compare by ${compareMode} — tap to toggle`} onClick={() => setCompareMode(m => m === 'time' ? 'position' : 'time')}>{compareMode === 'time' ? 'T' : 'P'}</button>
         <button className={`mtb-btn mtb-btn-text ${cornerAnalysisMode ? 'mtb-btn-active' : ''}`} aria-label="Corner analysis" onClick={() => setCornerAnalysisMode(v => !v)}>{'◎'}</button>
-        {laps.some(l => l.video_path) && (
-          <button className={`mtb-btn ${videoOverlayOn ? 'mtb-btn-active' : ''}`} aria-label="Lap video" onClick={() => setVideoOverlayOn(v => !v)}>{'🎥'}</button>
-        )}
         <button className="mtb-btn" aria-label="Map" onClick={() => setMobileDrawer(d => d === 'map' ? null : 'map')}>{'🗺'}</button>
         <button className="mtb-btn" aria-label="Charts" onClick={() => setMobileDrawer(d => d === 'data' ? null : 'data')}>{'📈'}</button>
         <button className={`mtb-btn ${showCarHuds ? 'mtb-btn-active' : ''}`} aria-label="Toggle car data" onClick={() => setShowCarHuds(v => !v)}>{'📊'}</button>
       </div>
-
-      {/* Lap video overlay — only renders when the focused lap's manifest entry
-          carries ``video_path`` (i.e. the /video route). PIP-style bottom-right
-          on desktop; can be hidden / re-opened via the toolbar toggle. */}
-      <VideoOverlay
-        visible={videoOverlayOn}
-        lap={laps.find(l => l.id === focusLapId) ?? laps[0]}
-        playing={playing}
-        speed={speed}
-        sectorStartTime={sectorStartTime}
-        onClose={() => setVideoOverlayOn(false)}
-      />
 
       {/* Drawer backdrop — closes the active drawer on tap. */}
       {mobileDrawer && <div className="mobile-drawer-backdrop" onClick={() => setMobileDrawer(null)} />}
@@ -210,16 +192,6 @@ export function DesktopApp() {
           >
             {cornerAnalysisMode ? '◉' : '◎'} Corner analysis
           </button>
-          {laps.some(l => l.video_path) && (
-            <button
-              className={videoOverlayOn ? 'active-toggle' : ''}
-              onClick={() => setVideoOverlayOn(v => !v)}
-              aria-pressed={videoOverlayOn}
-              title="Show / hide synchronised lap video overlay"
-            >
-              {videoOverlayOn ? '◉' : '◎'} Lap video
-            </button>
-          )}
         </div>
 
         <TimeScrubber mode="desktop" />
@@ -258,8 +230,11 @@ export function DesktopApp() {
       {/* Mounted ONCE for the lifetime of the desktop app — keeps the
           r3f Canvas + WebGL context alive across layout-preset swaps.
           Its CSS rect tracks whichever `<Viewer3DSlot>` is currently
-          rendered inside `<LayoutGrid>`. */}
-      <PersistentViewer3D />
+          rendered inside `<LayoutGrid>`. Error-bounded so a Canvas /
+          drei-asset failure can't unmount the rest of the app. */}
+      <Viewer3DErrorBoundary>
+        <PersistentViewer3D />
+      </Viewer3DErrorBoundary>
     </div>
   )
 }

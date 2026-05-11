@@ -34,7 +34,14 @@
  *   worker from the Application → Service Workers panel and reload.
  */
 
-const CACHE_VERSION = 'v1'
+// Bump on deploys that change asset hosting topology (e.g. new pull zone,
+// renamed files) so existing visitors' workers purge stale cache entries
+// on first activation against the new config. Without a bump, in-flight
+// browsers keep serving old-CDN responses until natural eviction.
+//   v1 → initial single-pull-zone caching
+//   v2 → videos split onto dedicated `vr-raceai-me-poc-videos.b-cdn.net`
+//        pull zone + Bunny-storage filename canonicalisation
+const CACHE_VERSION = 'v2'
 const CACHE_NAME = `vr-poc-assets-${CACHE_VERSION}`
 const ASSET_PREFIX = '/assets/'
 

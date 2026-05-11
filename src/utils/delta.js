@@ -18,7 +18,11 @@
  */
 export function computeLapDelta(laps, telemetryData) {
   if (laps.length < 2) return null
-  const lap1 = laps[0], lap2 = laps[1]
+  // `lap1` is the reference (the manifest's `ghost: false` lap); `lap2`
+  // is the first ghost we're comparing against. Falls back to array
+  // order for manifests that predate the `ghost` flag.
+  const lap1 = laps.find((l) => !l.ghost) ?? laps[0]
+  const lap2 = laps.find((l) => l.ghost) ?? laps[1]
   if (!lap1?.samples?.length || !lap2?.samples?.length) return null
 
   function cumDist(samples) {

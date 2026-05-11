@@ -12,7 +12,11 @@ import * as THREE from 'three'
  * - `applySyncOffset` — allocating variant of the same.
  */
 
-export function catmullRom(p0, p1, p2, p3, t, tension = 0.5) {
+// Catmull-Rom segment interpolation. Module-private — only used by the
+// sample* helpers below. Was previously exported but no external module
+// imports it; keeping it un-exported lets the bundler tree-shake calls
+// to its dead-code branches without uplifting the whole symbol.
+function catmullRom(p0, p1, p2, p3, t, tension = 0.5) {
   // tension 0 = standard CR, tension 1 = linear (no overshoot)
   const k = (1 - tension) * 0.5
   const t2 = t * t
@@ -26,8 +30,9 @@ export function catmullRom(p0, p1, p2, p3, t, tension = 0.5) {
   return h00 * p1 + h10 * m1 + h01 * p2 + h11 * m2
 }
 
-// Ensure neighbour quaternions are in the same hemisphere (avoid sign flips that look jittery)
-export function alignQuat(ref, q) {
+// Ensure neighbour quaternions are in the same hemisphere (avoid sign flips
+// that look jittery). Module-private — same reasoning as `catmullRom`.
+function alignQuat(ref, q) {
   // Dot product < 0 means q is in opposite hemisphere → negate for shorter interpolation path
   const dot = ref[0] * q[0] + ref[1] * q[1] + ref[2] * q[2] + ref[3] * q[3]
   return dot < 0 ? [-q[0], -q[1], -q[2], -q[3]] : q

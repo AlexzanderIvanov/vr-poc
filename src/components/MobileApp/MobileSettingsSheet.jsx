@@ -41,19 +41,15 @@ export function MobileSettingsSheet({ open, onClose }) {
   const focusLapId          = useStore((s) => s.focusLapId)
   const visibility          = useStore((s) => s.visibility)
   const cornerAnalysisMode  = useStore((s) => s.cornerAnalysisMode)
-  const videoOverlayOn      = useStore((s) => s.videoOverlayOn)
 
   const setCameraMode         = useStore((s) => s.setCameraMode)
   const setCompareMode        = useStore((s) => s.setCompareMode)
   const setFocusLapId         = useStore((s) => s.setFocusLapId)
   const setVisibility         = useStore((s) => s.setVisibility)
   const setCornerAnalysisMode = useStore((s) => s.setCornerAnalysisMode)
-  const setVideoOverlayOn     = useStore((s) => s.setVideoOverlayOn)
 
   const toggleLap = (lapId) =>
     setVisibility((s) => ({ ...s, [lapId]: !s[lapId] }))
-
-  const hasVideo = laps.some((l) => l.video_path)
 
   return (
     <>
@@ -125,15 +121,6 @@ export function MobileSettingsSheet({ open, onClose }) {
               <span>Corner analysis</span>
               <span className="mobile-toggle-pill">{cornerAnalysisMode ? 'ON' : 'OFF'}</span>
             </button>
-            {hasVideo && (
-              <button
-                className={`mobile-toggle-row ${videoOverlayOn ? 'is-active' : ''}`}
-                onClick={() => setVideoOverlayOn((v) => !v)}
-              >
-                <span>Lap video</span>
-                <span className="mobile-toggle-pill">{videoOverlayOn ? 'ON' : 'OFF'}</span>
-              </button>
-            )}
           </section>
 
           <button className="mobile-sheet-close" onClick={onClose}>Close</button>

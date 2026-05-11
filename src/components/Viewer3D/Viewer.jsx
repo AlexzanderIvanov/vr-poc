@@ -38,7 +38,6 @@ export function Viewer() {
   const telemetryData   = useStore((s) => s.telemetryData)
   const lapTimeOffset   = useStore((s) => s.lapTimeOffset)
   const sectorStartTime = useStore((s) => s.sectorStartTime)
-  const videoOverlayOn  = useStore((s) => s.videoOverlayOn)
 
   // Per-lap polyline lookup for position-mode comparison.
   const positionLookups = useMemo(() => {
@@ -127,7 +126,13 @@ export function Viewer() {
     return { pos: camPos.toArray(), look: lookAt.toArray() }
   }, [focusLap])
 
-  const liftViewForVideo = videoOverlayOn && laps.some((l) => l.video_path)
+  // `liftView` historically pulled the chase camera up so a bottom-right
+  // PIP overlay wouldn't cover the car. That overlay was removed in favour
+  // of the side-by-side video panel inside the analysis layout grid (no
+  // floating overlay any more), so we always pass `false` now. Kept the
+  // prop on `<CameraRig>` for an easy revival if a future preset needs
+  // to make space at the bottom of the scene again.
+  const liftViewForVideo = false
   const hideDelta = !!manifest?.hide_delta
 
   if (!manifest) return null
@@ -173,28 +178,39 @@ export function Viewer() {
         {laps.map((lap) => (
           <Trajectory key={`${lap.id}-line`} lap={lap} visible={visibility[lap.id] ?? true} syncOffset={syncOffsets[lap.id]} telemetry={telemetryData[lap.id]} />
         ))}
-        {laps.map((lap, lapIdx) => (
+        {/*
+          Ref/ghost assignment is driven by the manifest's `lap.ghost` flag,
+          not by array position. Exactly one lap per route is the reference
+          (ghost === false); the others are ghosts. We resolve once outside
+          the map so each `CarEntity` knows which lap (if any) to compare
+          against in position mode.
+        */}
+        {(() => {
+          const refLap = laps.find((l) => !l.ghost) ?? laps[0]
+          const firstGhost = laps.find((l) => l.ghost)
+          return laps.map((lap) => (
           <CarEntity
             key={lap.id}
             carUrl={assetUrl(manifest.car)}
             lap={lap}
-            lapTimeOffset={lapIdx > 0 ? lapTimeOffset : 0}
-            otherLapTimeOffset={lapIdx === 0 ? lapTimeOffset : 0}
+            lapTimeOffset={lap.ghost ? lapTimeOffset : 0}
+            otherLapTimeOffset={!lap.ghost ? lapTimeOffset : 0}
             visible={visibility[lap.id] ?? true}
             onTargetReady={handleTargetReady}
             syncOffset={syncOffsets[lap.id]}
             telemetry={telemetryData[lap.id]}
-            isRefLap={lapIdx === 0}
+            isRefLap={!lap.ghost}
             sectorStartTime={sectorStartTime}
-            otherLap={lapIdx === 0 ? laps[1] : null}
+            otherLap={!lap.ghost ? firstGhost ?? null : null}
             hideDelta={hideDelta}
             showCarHuds={false}
             compareMode={compareMode}
-            refLap={lapIdx > 0 ? laps[0] : null}
-            refSyncOffset={lapIdx > 0 ? syncOffsets[laps[0].id] : null}
+            refLap={lap.ghost ? refLap ?? null : null}
+            refSyncOffset={lap.ghost && refLap ? syncOffsets[refLap.id] : null}
             ownPositionLookup={positionLookups[lap.id]}
           />
-        ))}
+          ))
+        })()}
         {focusTelemetry && (
           <ScopedTrackMarkers
             focusLap={focusLap}
@@ -234,17 +250,21 @@ function ScopedCornerMarkers() {
   const syncOffsets   = useStore((s) => s.syncOffsets)
   const deltaData     = useStore((s) => s.deltaData)
   const cornerData = useMemo(() => {
-    const refLap = laps[0]
-    const ghostLap = laps[1]
+    // Reference lap = the manifest-declared `ghost: false` lap (one per route).
+    // First ghost = the first lap with `ghost: true`. Falls back to array
+    // order if no ghost flag is set, so manifests without the flag keep
+    // working.
+    const refLap = laps.find((l) => !l.ghost) ?? laps[0]
+    const ghostLap = laps.find((l) => l.ghost) ?? laps[1]
     const refCorners = refLap ? computeCornerAnalysis(refLap, telemetryData[refLap.id], syncOffsets[refLap.id]) : []
     const ghostCorners = ghostLap ? computeCornerAnalysis(ghostLap, telemetryData[ghostLap.id], syncOffsets[ghostLap.id]) : []
     const pairs = pairCorners(refCorners, ghostCorners)
     const sectorsWithArc = deltaData?.sectors && refLap
       ? addSectorArcLengths(deltaData.sectors.map((s) => ({ ...s })), refLap)
       : []
-    return { refCorners, ghostCorners, pairs, sectorsWithArc }
+    return { refCorners, ghostCorners, pairs, sectorsWithArc, refLap, ghostLap }
   }, [laps, telemetryData, syncOffsets, deltaData])
-  return <ScopedCornerMarkersInner cornerData={cornerData} refLapId={laps[0]?.id} ghostLapId={laps[1]?.id} />
+  return <ScopedCornerMarkersInner cornerData={cornerData} refLapId={cornerData.refLap?.id} ghostLapId={cornerData.ghostLap?.id} />
 }
 
 // Thin colour-aware wrapper around `<CornerMarkers>`. Subscribes to the

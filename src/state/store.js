@@ -89,7 +89,6 @@ export const useStore = create((set, get) => ({
   cameraMode: defaultCameraMode(),
   compareMode: 'time',           // 'time' | 'position'
   cornerAnalysisMode: false,
-  videoOverlayOn: true,
 
   // ---------- per-lap presentation overrides ----------
   // `lapColors[lapId] = '#hex'` — user override that wins over the palette
@@ -144,7 +143,6 @@ export const useStore = create((set, get) => ({
   setCameraMode:         (v) => set((s) => ({ cameraMode: apply(v, s.cameraMode) })),
   setCompareMode:        (v) => set((s) => ({ compareMode: apply(v, s.compareMode) })),
   setCornerAnalysisMode: (v) => set((s) => ({ cornerAnalysisMode: apply(v, s.cornerAnalysisMode) })),
-  setVideoOverlayOn:     (v) => set((s) => ({ videoOverlayOn: apply(v, s.videoOverlayOn) })),
 
   // ---------- actions: analysis frame ----------
   setViewport: (vp) => {

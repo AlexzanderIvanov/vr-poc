@@ -683,8 +683,7 @@ body {
 
 .mobile-toolbar,
 .mobile-scrubber,
-.mobile-drawer-backdrop,
-.mobile-telemetry-cards {
+.mobile-drawer-backdrop {
   display: none;
 }
 
@@ -856,71 +855,12 @@ body {
     height: auto;
   }
 
-  /* Hide the 3D-anchored telemetry card on mobile — replaced by the fixed
-     top-of-screen overlay below. The delta badge is kept above the car. */
+  /* Hide the 3D-anchored telemetry card on mobile — the dedicated mobile
+     app shell (see <MobileApp>) renders its own panel-driven UI for
+     telemetry, so the in-scene HUD only makes sense on desktop. The
+     delta badge is kept above the car. */
   .car-telemetry-hud-wrap {
     display: none !important;
-  }
-
-  /* Top-of-screen telemetry cards — two compact cards side-by-side, each
-     outlined with its lap color. */
-  .mobile-telemetry-cards {
-    display: flex;
-    gap: 8px;
-    position: absolute;
-    top: 10px;
-    left: 68px;  /* leave room for the toolbar column */
-    right: 10px;
-    z-index: 35;
-    pointer-events: none;
-  }
-
-  .mobile-tel-card {
-    flex: 1;
-    min-width: 0;
-    padding: 6px 8px 8px;
-    background: rgba(9, 11, 16, 0.86);
-    border: 2px solid;
-    border-radius: 8px;
-    backdrop-filter: blur(6px);
-    position: relative;
-    overflow: hidden;
-    transition: box-shadow 0.15s;
-  }
-
-  .mobile-tel-card-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    opacity: 0.8;
-  }
-
-  .mobile-tel-card .hud-bar-row {
-    margin: 2px 0;
-  }
-
-  .mobile-tel-card .hud-bar-label {
-    font-size: 9px;
-    width: 22px;
-  }
-
-  .mobile-tel-card .hud-bar {
-    height: 6px;
-  }
-
-  .mobile-tel-card .hud-rpm {
-    font-size: 10px;
-    margin-top: 2px;
-  }
-
-  .mobile-tel-card.hud-braking {
-    box-shadow: 0 0 10px rgba(244, 67, 54, 0.35);
-  }
-
-  .mobile-tel-card.hud-throttle {
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.35);
   }
 
   /* Delta badge above the car is kept but shrunk a bit on mobile. */
@@ -1986,6 +1926,53 @@ body.panel-resizing .echarts-for-react,
   font-family: inherit;
   font-size: 14px;
   cursor: pointer;
+}
+
+/* Fallback rendered by <Viewer3DErrorBoundary> when the 3D Canvas / drei
+   asset chain throws. Sized to match the persistent viewer's wrapper so
+   the panel slot still reserves its grid cell. */
+.viewer3d-fallback {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: rgba(9, 11, 16, 0.92);
+  color: #cfd6e8;
+  z-index: 1;
+  pointer-events: auto;
+}
+.viewer3d-fallback-title {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffb74d;
+}
+.viewer3d-fallback-body {
+  font-family: monospace;
+  font-size: 11px;
+  color: rgba(207,214,232,0.65);
+  max-width: 480px;
+  text-align: center;
+  line-height: 1.4;
+}
+.viewer3d-fallback-retry {
+  margin-top: 8px;
+  padding: 8px 14px;
+  background: rgba(76,175,200,0.18);
+  border: 1px solid rgba(76,175,200,0.55);
+  border-radius: 6px;
+  color: #cfe7ee;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.viewer3d-fallback-retry:hover {
+  background: rgba(76,175,200,0.28);
 }
 
 /* ============================================================

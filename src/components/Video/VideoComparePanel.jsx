@@ -41,8 +41,11 @@ export function VideoComparePanel() {
   const lapTimeOffset    = useStore((s) => s.lapTimeOffset)
   const lapColorMap      = useLapColorMap()
 
-  const refLap   = laps[0]
-  const ghostLap = laps[1]
+  // Manifest flag drives which lap is "ref" vs "ghost" — same convention
+  // used by the 3D viewer's `<CarEntity>` and the corner-analysis panel.
+  // Array-order fallback keeps legacy manifests (no `ghost` field) working.
+  const refLap   = laps.find((l) => !l.ghost) ?? laps[0]
+  const ghostLap = laps.find((l) => l.ghost) ?? laps[1]
   const refSyncOffset   = refLap   ? syncOffsets[refLap.id]   : null
   const ghostSyncOffset = ghostLap ? syncOffsets[ghostLap.id] : null
 

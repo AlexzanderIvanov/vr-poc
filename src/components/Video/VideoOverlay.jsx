@@ -232,7 +232,9 @@ export function VideoOverlay({ visible, lap, playing, speed, sectorStartTime, on
         <button onClick={() => setSize(s => s === 'normal' ? 'large' : 'normal')} title={size === 'normal' ? 'Enlarge' : 'Shrink'} aria-label={size === 'normal' ? 'Enlarge video' : 'Shrink video'}>
           {size === 'normal' ? '+' : '−'}
         </button>
-        <button onClick={onClose} title="Hide video">✕</button>
+        {onClose && (
+          <button onClick={onClose} title="Hide video">✕</button>
+        )}
       </div>
       {lap?.video_label && <div className="video-overlay-label">{lap.video_label}</div>}
     </div>
@@ -240,9 +242,11 @@ export function VideoOverlay({ visible, lap, playing, speed, sectorStartTime, on
 }
 
 /**
- * Panel adapter — pulls all VideoOverlay props from the store.
- * `playhead` / `playheadRef` are NOT passed: VideoOverlay subscribes to
- * those itself so the 15 Hz tick stays inside this leaf component.
+ * Panel adapter — wraps `<VideoOverlay>` for use inside a layout grid
+ * cell. No `onClose` is passed because a panel can't be "closed" from
+ * inside itself; remove it by changing the layout preset. `playhead`
+ * subscriptions stay inside `<VideoOverlay>` so the 15 Hz tick doesn't
+ * bubble into the panel registry.
  */
 export function VideoPanel() {
   const laps          = useStore((s) => s.laps)
@@ -250,7 +254,6 @@ export function VideoPanel() {
   const playing       = useStore((s) => s.playing)
   const speed         = useStore((s) => s.speed)
   const sectorStartTime = useStore((s) => s.sectorStartTime)
-  const setVideoOverlayOn = useStore((s) => s.setVideoOverlayOn)
   const lap = laps.find((l) => l.id === focusLapId) ?? laps.find((l) => l.video_path) ?? null
   if (!lap?.video_path) return <div className="panel-empty">No video for this lap</div>
   return (
@@ -260,7 +263,6 @@ export function VideoPanel() {
       playing={playing}
       speed={speed}
       sectorStartTime={sectorStartTime}
-      onClose={() => setVideoOverlayOn(false)}
     />
   )
 }

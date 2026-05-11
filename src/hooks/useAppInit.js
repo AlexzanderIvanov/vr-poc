@@ -9,6 +9,7 @@ import {
   pairCorners,
   addSectorArcLengths,
 } from '../utils/cornerAnalysis'
+import { RECORDING_FPS, RECORDING_BITRATE } from '../constants'
 
 /**
  * App-level data pipes — wires the data service, playback loop, viewport
@@ -74,11 +75,11 @@ export function useRecorder() {
     }
     const canvas = document.querySelector('.viewer-shell canvas')
     if (!canvas) return
-    const stream = canvas.captureStream(30)
+    const stream = canvas.captureStream(RECORDING_FPS)
     const recorder = new MediaRecorder(stream, {
       mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
         ? 'video/webm;codecs=vp9' : 'video/webm',
-      videoBitsPerSecond: 8_000_000,
+      videoBitsPerSecond: RECORDING_BITRATE,
     })
     chunksRef.current = []
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
@@ -115,8 +116,10 @@ export function useCornerAnalysisData() {
 
   return useMemo(() => {
     if (!cornerAnalysisMode) return null
-    const refLap = laps[0]
-    const ghostLap = laps[1]
+    // Manifest flag drives ref/ghost picking. Array-order fallback keeps
+    // legacy manifests that don't carry `ghost` working.
+    const refLap = laps.find((l) => !l.ghost) ?? laps[0]
+    const ghostLap = laps.find((l) => l.ghost) ?? laps[1]
     const refCorners = refLap
       ? computeCornerAnalysis(refLap, telemetryData[refLap.id], syncOffsets[refLap.id])
       : []

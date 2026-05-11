@@ -8,6 +8,7 @@ import { MobilePlaybackBar } from './MobilePlaybackBar'
 import { MobileTabBar, MOBILE_TABS } from './MobileTabBar'
 import { MobileSettingsSheet } from './MobileSettingsSheet'
 import { PersistentViewer3D } from '../Viewer3D/PersistentViewer3D'
+import { Viewer3DErrorBoundary } from '../Viewer3D/Viewer3DErrorBoundary'
 
 /**
  * Mobile presentation root.
@@ -95,8 +96,11 @@ export function MobileApp() {
       {/* Persistent r3f Canvas — survives tab swaps between 3D / Map /
           Telemetry / Delta. Its CSS rect tracks the `<Viewer3DSlot>`
           rendered when the user is on the 3D tab; hidden (but still
-          mounted) on every other tab. */}
-      <PersistentViewer3D />
+          mounted) on every other tab. Error-bounded so a Canvas crash
+          can't kill the tab nav / playback bar. */}
+      <Viewer3DErrorBoundary>
+        <PersistentViewer3D />
+      </Viewer3DErrorBoundary>
     </div>
   )
 }
