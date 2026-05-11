@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { useStore } from '../../state/store'
-import { safe } from '../../utils/safe'
+import { safe, isEchartsGridReady } from '../../utils/safe'
 // `findValueAt` is no longer re-exported from this `.jsx` file — vite's
 // Fast Refresh refuses to hot-reload `.jsx` modules that mix React
 // components with non-component exports. New imports should target
@@ -75,7 +75,11 @@ export function ChartValueLabels({ containerRef, echartsRef, providers, xAxisFro
       const cRect = container.getBoundingClientRect()
       const offX = dRect.left - cRect.left
       const offY = dRect.top - cRect.top
-      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [phXValue, 0])?.[0], null)
+      // Skip the call (and the "No coordinate system" warning it logs)
+      // until grid 0 has a renderable rect. See `isEchartsGridReady`.
+      const phX = isEchartsGridReady(chart, 0)
+        ? safe(() => chart.convertToPixel({ gridIndex: 0 }, [phXValue, 0])?.[0], null)
+        : null
 
       providers.forEach((p, i) => {
         const grid = safe(

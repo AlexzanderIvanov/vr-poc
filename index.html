@@ -72,8 +72,11 @@
         // Kick off the manifest fetch ourselves so we can read it and
         // inject preload tags for the GLBs as soon as it lands. App.jsx
         // will fetch the same URL later — the browser's HTTP cache merges
-        // the two requests transparently.
-        fetch(manifestUrl, { credentials: 'omit' })
+        // the two requests transparently. No `credentials` option, so
+        // we get the default `same-origin` mode that matches the
+        // preload tag's `crossorigin="anonymous"` setting (anonymous ≡
+        // same-origin in credentials terms).
+        fetch(manifestUrl)
           .then(function (r) { return r.json() })
           .then(function (m) {
             ;[m && m.track, m && m.car].forEach(function (rel) {

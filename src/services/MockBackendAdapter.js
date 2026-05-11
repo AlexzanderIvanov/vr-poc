@@ -33,6 +33,15 @@ const ROUTE_TO_MANIFEST = {
 const SIMULATED_LATENCY_MS = 25
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Note: the preload tags in `index.html` use `crossorigin="anonymous"`,
+// which per the HTML spec gives the request a CORS mode + `same-origin`
+// CREDENTIALS mode. The fetches in this module MUST also be
+// credentials=`same-origin` to be eligible for preload reuse — that's
+// the default for `fetch()`, so we don't set a `credentials` option.
+// (Setting `credentials: 'omit'` here would NOT match anonymous; the
+// browser would log "preload found but credentials mode does not match"
+// and refetch the file.)
+
 export class MockBackendAdapter {
   async listManifests() {
     return Object.entries(ROUTE_TO_MANIFEST).map(([id, path]) => ({ id, path }))

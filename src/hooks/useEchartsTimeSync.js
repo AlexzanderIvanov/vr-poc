@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useStore } from '../state/store'
-import { safe } from '../utils/safe'
+import { safe, isEchartsGridReady } from '../utils/safe'
 import { useChartGestures } from './useChartGestures'
 import { PLAYHEAD_OVERLAY_CLASS } from '../constants'
 
@@ -131,7 +131,14 @@ export function useEchartsTimeSync(
       // chart's x-axis. Identity for time-axis charts, arc-length lookup
       // for distance-axis charts.
       const phX_data = xAxisFromTime(phTime)
-      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [phX_data, 0])?.[0], null)
+      // Guard against the "no coordinate system" warning that fires
+      // during the first frame after mount / option swap (grid exists
+      // but its rect isn't ready yet). `safe()` catches the eventual
+      // throw, but ECharts logs a warning BEFORE throwing — this guard
+      // skips the call entirely until the grid is renderable.
+      const phX = isEchartsGridReady(chart, 0)
+        ? safe(() => chart.convertToPixel({ gridIndex: 0 }, [phX_data, 0])?.[0], null)
+        : null
       if (phX != null && isFinite(phX) && phX >= 0) {
         const dRect = dom.getBoundingClientRect()
         const cRect = container.getBoundingClientRect()
