@@ -16,9 +16,13 @@ node_modules/
 /video/
 /videos/
 
-# Lap videos served by the app — excluded to keep the repo lean
+# Lap videos served by the dev server. The path holds symlinks pointing
+# at `/videos/` (the raw-source dir above); the symlinks themselves stay
+# out of git so a fresh clone doesn't inherit dangling links to a
+# `/videos/` directory that doesn't exist on the new machine.
+# `dist/assets/videos/` doesn't need its own rule — it's already covered
+# by the `/dist/` ignore above.
 public/assets/videos/
-dist/assets/videos/
 
 # Editor / OS
 .vscode/
