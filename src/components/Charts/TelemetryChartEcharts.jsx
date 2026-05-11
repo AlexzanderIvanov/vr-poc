@@ -2,17 +2,33 @@ import React, { useMemo } from 'react'
 import { useStore } from '../../state/store'
 import { ChartShell } from './ChartShell'
 import { findValueAt } from '../../utils/findValueAt'
-import { CHART_COLORS } from '../../constants'
+import {
+  arcLengthAtTime,
+  timeAtArcLength,
+  totalArcLength,
+} from '../../utils/arcLength'
+import { useLapColorMap } from '../../hooks/useLapColor'
 
 /**
- * Multi-series telemetry chart (TPS / BRAKE / RPM / STEER) using ECharts.
+ * Multi-series telemetry chart (TPS / BRAKE / SPEED / STEER) using ECharts.
  *
  * One grid per metric, two series per metric (one line per lap):
  *   - ref lap (laps[0])  → solid line + light area fill
  *   - ghost lap (laps[1+]) → dashed line, no fill
  *
+ * X-axis flips with `compareMode`:
+ *   - `'time'`     → lap time in seconds (per-lap; laps overlay by elapsed
+ *                    time — useful for "what was the driver doing at t=5 s
+ *                    after the line").
+ *   - `'position'` → cumulative ground-plane distance in metres (per-lap;
+ *                    laps overlay by physical track position — the canonical
+ *                    race-engineer view that exposes braking points, mid-
+ *                    corner speed deltas, throttle-application differences).
+ *
  * Two-way sync with the store's analysis frame and 15 Hz playhead is handled
- * by `useEchartsTimeSync`. This component just builds the option object.
+ * by `useEchartsTimeSync`. This component just builds the option object and
+ * supplies the time→x converter `ChartShell` threads to the playhead
+ * overlay + value labels.
  *
  * Adapter for the layout registry exported as `TelemetryChartPanel`.
  */
@@ -29,48 +45,84 @@ const fmtSigned = (v) => `${v >= 0 ? '+' : ''}${Math.round(v)}`
 const seriesFromSamples = (key) => (lap, tel) =>
   tel?.samples?.map((s) => [s.t, s[key] ?? 0]) ?? []
 
-// Colours pulled from `constants.CHART_COLORS` so the design system has a
-// single source of truth. Adding a new channel? Add the colour there first.
+// Each row plots ONE channel for ALL laps. Per-lap traces are coloured
+// using the global lap colour pipe (`useLapColorMap()` → resolves the
+// override OR `LAP_COLOR_PALETTE[lapIndex]`) so a trace, a car dot, and
+// a trajectory line for the same lap always match — and a user-driven
+// recolour propagates everywhere on one render. Channels are identified
+// by row position + the persistent left-corner label (`<ChartValueLabels
+// rowName>`), not by stroke colour.
 const SERIES_DEFS = [
-  { key: 'tps',   color: CHART_COLORS.tps,   label: 'TPS',   max: 255, format: fmtInt,
+  { key: 'tps',   label: 'TPS',   max: 255, format: fmtInt,
     getSeries: seriesFromSamples('tps') },
-  { key: 'fbp',   color: CHART_COLORS.brake, label: 'BRAKE', max: 150, format: fmtInt,
+  { key: 'fbp',   label: 'BRAKE', max: 150, format: fmtInt,
     getSeries: seriesFromSamples('fbp') },
-  { key: 'speed', color: CHART_COLORS.speed, label: 'SPEED', max: 250, format: fmtInt,
+  { key: 'speed', label: 'SPEED', max: 250, format: fmtInt,
     getSeries: (lap) => lap?.gpsSpeed ?? [] },
-  { key: 'steer', color: CHART_COLORS.steer, label: 'STEER', signed: true, max: 250, format: fmtSigned,
+  { key: 'steer', label: 'STEER', signed: true, max: 250, format: fmtSigned,
     getSeries: seriesFromSamples('steer') },
 ]
 
-export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
-  const duration = useStore((s) => s.duration)
+// Row-name colour — a soft neutral so it doesn't fight the per-lap series
+// colours below it. Same for both modes.
+const ROW_NAME_COLOR = '#cfd6e8'
 
-  // Per-grid `[t, v]` arrays cached for the live value readouts. Mirrors the
-  // shape used by the chart's series; rebuilt only when laps/telemetry change.
+export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
+  const duration    = useStore((s) => s.duration)
+  const compareMode = useStore((s) => s.compareMode)
+  const byDistance  = compareMode === 'position'
+  // Reactive `{ lapId → hex }` map. Subscribes to the store's `lapColors`
+  // override slice AND the `laps` array; the chart's `option` memo lists
+  // this in its dep array so a colour change rebuilds the series in
+  // one render with no remount.
+  const lapColorMap = useLapColorMap()
+
+  // Per-lap `[t, v] → [x, v]` mapper. Position-compare mode rewrites every
+  // sample's x-coordinate to the cumulative ground-plane arc length on
+  // that lap (so the two cars' traces align where they were physically
+  // on track, not where they were in their own elapsed-time clocks).
+  const mapXForLap = useMemo(() => {
+    if (!byDistance) return () => (data) => data
+    return (lap) => {
+      if (!lap?.samples?.length) return (data) => data
+      // Capture once per lap; the helper memoises the cum-arc table.
+      return (data) => data.map(([t, v]) => [arcLengthAtTime(lap.samples, t), v])
+    }
+  }, [byDistance])
+
+  // Per-grid arrays for the live value readouts. Shape mirrors the chart
+  // series — `[xValue, channelValue]` — so the same `findValueAt(data, x)`
+  // works whether x is seconds or metres. Each entry also carries its
+  // lap colour so the value-label column tints the number with the same
+  // hex the trace uses.
   const seriesByGrid = useMemo(() => {
     const lapsWithTel = laps.filter((l) => telemetryData[l.id]?.samples?.length)
     return SERIES_DEFS.map((def) => lapsWithTel.map((lap, lapIdx) => ({
       isGhost: lapIdx > 0,
-      data: def.getSeries(lap, telemetryData[lap.id]),
+      color: lapColorMap[lap.id],
+      data: mapXForLap(lap)(def.getSeries(lap, telemetryData[lap.id])),
     })))
-  }, [laps, telemetryData])
+  }, [laps, telemetryData, mapXForLap, lapColorMap])
 
   const valueProviders = useMemo(
     () => SERIES_DEFS.map((def, i) => ({
       gridIndex: i,
       rowName: def.label,
-      rowNameColor: def.color,
-      getLines: (t) => {
+      rowNameColor: ROW_NAME_COLOR,
+      getLines: (x) => {
+        // `x` is whatever the chart's x-axis represents — seconds in time
+        // mode, metres in distance mode — pre-converted by `ChartShell`'s
+        // `xAxisFromTime` so this lookup matches `seriesByGrid` data.
         const lapSeries = seriesByGrid[i]
         if (!lapSeries?.length) return null
         const out = []
         for (const ls of lapSeries) {
-          const v = findValueAt(ls.data, t)
+          const v = findValueAt(ls.data, x)
           if (v == null) continue
           out.push({
             text: def.format(v),
-            color: def.color,
-            opacity: ls.isGhost ? 0.65 : 1,
+            color: ls.color,
+            opacity: ls.isGhost ? 0.7 : 1,
           })
         }
         return out
@@ -79,29 +131,49 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
     [seriesByGrid],
   )
 
+  // Forward + inverse converters between the playhead's seconds and the
+  // chart's x-axis units. Identity in time mode; ref-lap arc length in
+  // position mode (the playhead's stored time IS ref-lap time, so the
+  // ref lap's distance is the right column to mirror).
+  const refLap = laps[0]
+  const xAxisFromTime = useMemo(() => {
+    if (!byDistance || !refLap?.samples?.length) return (t) => t
+    return (t) => arcLengthAtTime(refLap.samples, t)
+  }, [byDistance, refLap])
+  const xAxisToTime = useMemo(() => {
+    if (!byDistance || !refLap?.samples?.length) return (x) => x
+    return (x) => timeAtArcLength(refLap.samples, x)
+  }, [byDistance, refLap])
+  const xMax = byDistance && refLap?.samples?.length
+    ? totalArcLength(refLap.samples)
+    : duration
+
   const option = useMemo(() => {
     const lapsWithTel = laps.filter((l) => telemetryData[l.id]?.samples?.length)
-    if (!lapsWithTel.length || duration <= 0) return null
+    if (!lapsWithTel.length || xMax <= 0) return null
     const seriesData = []
     SERIES_DEFS.forEach((def, i) => {
       lapsWithTel.forEach((lap, lapIdx) => {
         const tel = telemetryData[lap.id]
         const isGhost = lapIdx > 0
+        const rawData = def.getSeries(lap, tel)
+        const xMapped = mapXForLap(lap)(rawData)
+        const lapColor = lapColorMap[lap.id]
         seriesData.push({
           name: `${def.label} · ${lap.label || lap.id}`,
           type: 'line',
-          data: def.getSeries(lap, tel),
+          data: xMapped,
           showSymbol: false,
           symbol: 'none',
           sampling: 'lttb',
           lineStyle: {
-            color: def.color,
+            color: lapColor,
             width: isGhost ? 1.1 : 1.5,
             type: isGhost ? 'dashed' : 'solid',
             opacity: isGhost ? 0.85 : 1.0,
           },
-          itemStyle: { color: def.color },
-          ...(isGhost ? {} : { areaStyle: { color: def.color, opacity: 0.10 } }),
+          itemStyle: { color: lapColor },
+          ...(isGhost ? {} : { areaStyle: { color: lapColor, opacity: 0.10 } }),
           xAxisIndex: i,
           yAxisIndex: i,
           animation: false,
@@ -123,17 +195,26 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
         backgroundColor: 'rgba(9, 11, 16, 0.92)',
         borderColor: 'rgba(255,255,255,0.12)',
         textStyle: { color: '#cfd6e8', fontSize: 11 },
-        // `line` (perpendicular to value axis) — vertical only. `cross`
-        // would also draw a horizontal line through the cursor's y, which
-        // we don't want.
-        axisPointer: { type: 'line', label: { show: false } },
+        // axisPointer.type 'none' suppresses the vertical hover line —
+        // we already render our own playhead overlay (`ChartPlayheadOverlay`)
+        // and a second crosshair on hover competes with it visually.
+        // The tooltip box still pops as the user moves the cursor; just
+        // the line is gone.
+        axisPointer: { type: 'none', label: { show: false } },
       },
       xAxis: SERIES_DEFS.map((_, i) => ({
         type: 'value',
         gridIndex: i,
         min: 0,
-        max: duration,
-        axisLabel: { show: i === SERIES_DEFS.length - 1, color: '#5a6378', fontSize: 9 },
+        max: xMax,
+        axisLabel: {
+          show: i === SERIES_DEFS.length - 1,
+          color: '#5a6378',
+          fontSize: 9,
+          formatter: byDistance
+            ? (v) => `${(v / 1000).toFixed(1)}km`
+            : (v) => `${v.toFixed(0)}s`,
+        },
         axisLine: { show: false },
         axisTick: { show: false },
         splitLine: { show: false },
@@ -160,7 +241,18 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
         // visually compete with the channel-name overlay.
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { show: false },
+        // Horizontal grid lines at each y-axis tick. Very subtle so they
+        // sit behind the traces without competing with them — the goal is
+        // to let the eye read a value off a trace by mentally extending it
+        // to the y-axis labels on the left.
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: 'rgba(255,255,255,0.06)',
+            width: 1,
+            type: 'solid',
+          },
+        },
         // Channel label rendered by `<ChartValueLabels>` (top-left of the
         // plot area) — keeping it out of ECharts means it can't overflow
         // into adjacent rows the way a rotated axis name would.
@@ -194,13 +286,15 @@ export function TelemetryChartEcharts({ laps = [], telemetryData = {} }) {
       ],
       series: seriesData,
     }
-  }, [laps, telemetryData, duration])
+  }, [laps, telemetryData, xMax, mapXForLap, byDistance, lapColorMap])
 
   return (
     <ChartShell
       option={option}
       valueProviders={valueProviders}
-      tMax={duration}
+      tMax={xMax}
+      xAxisFromTime={xAxisFromTime}
+      xAxisToTime={xAxisToTime}
       emptyMessage="No telemetry"
     />
   )

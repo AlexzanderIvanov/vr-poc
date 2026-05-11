@@ -1987,3 +1987,112 @@ body.panel-resizing .echarts-for-react,
   font-size: 14px;
   cursor: pointer;
 }
+
+/* ============================================================
+   Side-by-side cockpit video compare (PANELS.videocompare)
+   Used in the analysis preset in place of the track-map cell.
+   ============================================================ */
+.video-compare-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: #0a0c12;
+  min-height: 0;
+  min-width: 0;
+}
+.video-compare-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 2px solid rgba(255,255,255,0.2);
+  /* `borderTopColor` is overridden inline per lap colour. */
+}
+
+.single-lap-video {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.single-lap-video-empty {
+  background: rgba(14, 16, 22, 0.7);
+}
+.single-lap-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.single-lap-video-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  padding: 2px 8px;
+  background: rgba(9, 11, 16, 0.7);
+  color: #cfd6e8;
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  pointer-events: none;
+  max-width: calc(100% - 64px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.single-lap-video-mute {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  background: rgba(9, 11, 16, 0.7);
+  color: #cfd6e8;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  padding: 0;
+}
+.single-lap-video-mute:hover {
+  background: rgba(9, 11, 16, 0.95);
+}
+.single-lap-video-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.single-lap-video-spinner-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.18);
+  border-top-color: #4cafc8;
+  animation: video-overlay-spin 0.9s linear infinite;
+}
+.single-lap-video-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px 12px;
+  background: rgba(244, 67, 54, 0.18);
+  color: #ffb4ab;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 11px;
+}

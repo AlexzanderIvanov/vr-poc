@@ -45,6 +45,10 @@ import {
   TPS_FULL_THRESHOLD as FULL_THROTTLE_TPS,
   OSCILLATION_TPS_DIP,
 } from '../constants'
+import {
+  cumulativeArcLengths,
+  arcLengthAtTime,
+} from './arcLength'
 
 // Re-export so consumers that previously imported these from this module
 // keep working. New code should pull straight from `../constants`.
@@ -117,37 +121,10 @@ function sceneXYZAtTime(lapSamples, t, syncOffset) {
 }
 
 
-// Cumulative ground-plane arc length along lap.samples[]. One Float32Array per
-// lap, memoised across calls by key-ing on the samples array identity.
-const _arcLenCache = new WeakMap()
-
-
-function cumulativeArcLengths(lapSamples) {
-  let cum = _arcLenCache.get(lapSamples)
-  if (cum) return cum
-  cum = new Float32Array(lapSamples.length)
-  for (let i = 1; i < lapSamples.length; i++) {
-    const a = lapSamples[i - 1].position
-    const b = lapSamples[i].position
-    const dx = b[0] - a[0]
-    const dz = b[2] - a[2]
-    cum[i] = cum[i - 1] + Math.sqrt(dx * dx + dz * dz)
-  }
-  _arcLenCache.set(lapSamples, cum)
-  return cum
-}
-
-
-function arcLengthAtTime(lapSamples, t) {
-  if (!lapSamples?.length) return 0
-  const cum = cumulativeArcLengths(lapSamples)
-  const i = sampleIndexAtTime(lapSamples, t)
-  const curr = lapSamples[i]
-  const next = lapSamples[Math.min(i + 1, lapSamples.length - 1)]
-  const span = next.t - curr.t
-  const alpha = span > 0 ? Math.max(0, Math.min(1, (t - curr.t) / span)) : 0
-  return cum[i] + (cum[Math.min(i + 1, lapSamples.length - 1)] - cum[i]) * alpha
-}
+// `cumulativeArcLengths` and `arcLengthAtTime` live in `./arcLength.js`
+// so the chart-axis converter, the corner-analysis pipeline, and any
+// future per-distance accessor share one cache (WeakMap keyed by the
+// samples array).
 
 
 export function totalLapArcLength(lap) {

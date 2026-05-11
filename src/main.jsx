@@ -50,6 +50,22 @@ window.addEventListener('webglcontextlost', (e) => {
   showErrorOverlay('WEBGL CONTEXT LOST', 'The GPU dropped the WebGL context. Usually caused by GPU memory pressure on mobile.')
 }, true)
 
+// Register the asset-caching service worker (see `public/sw.js`). Failures
+// are non-fatal: the app still works through normal HTTP caching, just
+// without the deterministic-cache-for-big-GLBs benefit. Skipped during
+// the Vite HMR worker probe (would 404).
+if ('serviceWorker' in navigator) {
+  // Defer until after first paint so the worker registration doesn't
+  // compete with the critical path.
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      // Don't pop the crash overlay — degrade gracefully.
+
+      console.warn('[sw] registration failed:', err)
+    })
+  })
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />

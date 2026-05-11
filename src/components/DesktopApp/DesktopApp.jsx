@@ -1,12 +1,14 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useStore } from '../../state/store'
 import { useCornerAnalysisData, useRecorder } from '../../hooks/useAppInit'
+import { useLapColor } from '../../hooks/useLapColor'
 import { CornerAnalysisPanel } from '../Corners/CornerAnalysisPanel'
 import { LapSyncControls } from '../HUD/LapSyncControls'
 import { LoadingOverlay } from '../HUD/LoadingOverlay'
 import { TimeScrubber } from '../HUD/TimeScrubber'
 import { VideoOverlay } from '../Video/VideoOverlay'
 import { LayoutGrid, LayoutPresetBar } from '../Layout/LayoutGrid'
+import { PersistentViewer3D } from '../Viewer3D/PersistentViewer3D'
 
 const MODE_LABELS = {
   standard: 'Standard',
@@ -23,6 +25,43 @@ function groupLapsBySession(laps) {
     groups.get(sid).push(lap)
   }
   return groups
+}
+
+/**
+ * One row in the lap-list sidebar. Pulled into its own component so we
+ * can subscribe to the lap's presentation colour via `useLapColor`
+ * (hooks can't run in a loop in the parent). When a future
+ * `<LapColorPicker>` writes `setLapColor(id, hex)`, this row's swatch
+ * re-renders along with every other surface that reads through the
+ * same hook.
+ */
+function LapListRow({ lap, visibility, syncOffset, onToggle, onSyncChange }) {
+  const lapColor = useLapColor(lap.id)
+  return (
+    <div className="lap-entry">
+      <label className="lap-row">
+        <input
+          type="checkbox"
+          checked={visibility[lap.id] ?? true}
+          onChange={() => onToggle(lap.id)}
+        />
+        <span className="lap-swatch" style={{ background: lapColor }} />
+        <span className="lap-info">
+          <span className="lap-name">{lap.label}</span>
+          <span className="lap-tags">
+            <span
+              className="device-badge"
+              style={{ borderColor: DEVICE_COLORS[lap.device_id] || '#888' }}
+            >{(lap.device_id || '?').toUpperCase()}</span>
+            <span className="mode-badge">{MODE_LABELS[lap.mode] || lap.mode || '?'}</span>
+          </span>
+        </span>
+      </label>
+      {syncOffset && (
+        <LapSyncControls lap={lap} syncOffset={syncOffset} onSyncChange={onSyncChange} />
+      )}
+    </div>
+  )
 }
 
 function getRefWarnings(laps, visibility) {
@@ -196,20 +235,14 @@ export function DesktopApp() {
             <div key={sessionId} className="session-group">
               <div className="session-header">Session {sessionId}</div>
               {sessionLaps.map((lap) => (
-                <div key={lap.id} className="lap-entry">
-                  <label className="lap-row">
-                    <input type="checkbox" checked={visibility[lap.id] ?? true} onChange={() => toggleLap(lap.id)} />
-                    <span className="lap-swatch" style={{ background: lap.color }} />
-                    <span className="lap-info">
-                      <span className="lap-name">{lap.label}</span>
-                      <span className="lap-tags">
-                        <span className="device-badge" style={{ borderColor: DEVICE_COLORS[lap.device_id] || '#888' }}>{(lap.device_id || '?').toUpperCase()}</span>
-                        <span className="mode-badge">{MODE_LABELS[lap.mode] || lap.mode || '?'}</span>
-                      </span>
-                    </span>
-                  </label>
-                  {syncOffsets[lap.id] && <LapSyncControls lap={lap} syncOffset={syncOffsets[lap.id]} onSyncChange={handleSyncChange} />}
-                </div>
+                <LapListRow
+                  key={lap.id}
+                  lap={lap}
+                  visibility={visibility}
+                  syncOffset={syncOffsets[lap.id]}
+                  onToggle={toggleLap}
+                  onSyncChange={handleSyncChange}
+                />
               ))}
             </div>
           ))}
@@ -221,6 +254,12 @@ export function DesktopApp() {
         <LoadingOverlay />
         {cornerAnalysisMode && cornerData && <CornerAnalysisPanel cornerData={cornerData} laps={laps} />}
       </div>
+
+      {/* Mounted ONCE for the lifetime of the desktop app — keeps the
+          r3f Canvas + WebGL context alive across layout-preset swaps.
+          Its CSS rect tracks whichever `<Viewer3DSlot>` is currently
+          rendered inside `<LayoutGrid>`. */}
+      <PersistentViewer3D />
     </div>
   )
 }

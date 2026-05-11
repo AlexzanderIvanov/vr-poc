@@ -66,10 +66,17 @@ export const LAYOUT_PRESETS = {
       // rows and the delta chart is one row.
       defaultLeftRowPct: 60,
       defaultRightRowPct: 78,
+      // Analysis layout swaps the bottom-left `trackmap` slot for the
+      // side-by-side cockpit-video comparison. The track map already
+      // appears as a transparent mini-map overlay inside the 3D viewer
+      // (`<TrackMapPanel minimal />` in `Viewer.jsx`), so dedicating
+      // the bottom-left cell to video doesn't lose the map UX — and the
+      // side-by-side videos are the analysis layout's headline feature.
+      // Other presets keep `trackmap` in its own cell unchanged.
       cells: [
         { id: 'viewer3d' },
         { id: 'telemetry' },
-        { id: 'trackmap' },
+        { id: 'videocompare' },
         { id: 'delta' },
       ],
     },

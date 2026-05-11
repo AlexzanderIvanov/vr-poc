@@ -91,6 +91,12 @@ export const useStore = create((set, get) => ({
   cornerAnalysisMode: false,
   videoOverlayOn: true,
 
+  // ---------- per-lap presentation overrides ----------
+  // `lapColors[lapId] = '#hex'` — user override that wins over the palette
+  // default. Empty by default; populated by `<LapColorPicker>` (planned).
+  // Resolution helper: `hooks/useLapColor.resolveLapColor(state, lapId)`.
+  lapColors: {},
+
   // ---------- layout ----------
   layoutPreset: 'analysis',      // 'default' | 'analysis' | 'charts'
 
@@ -121,6 +127,18 @@ export const useStore = create((set, get) => ({
   setLapTimeOffset:   (v) => set((s) => ({ lapTimeOffset: apply(v, s.lapTimeOffset) })),
   setSectorStartTime: (v) => set((s) => ({ sectorStartTime: apply(v, s.sectorStartTime) })),
   setSelectedSector:  (v) => set((s) => ({ selectedSector: apply(v, s.selectedSector) })),
+
+  // ---------- actions: presentation ----------
+  // Write a per-lap colour override. Pass `null` / `undefined` to remove
+  // the override and fall back to the palette default. Subscribers via
+  // `useLapColor(lapId)` re-render automatically; visualisation
+  // components that depend on the colour inside `useMemo` should include
+  // `lapColors` in their dependency array.
+  setLapColor: (lapId, color) => set((s) => {
+    const next = { ...s.lapColors }
+    if (color == null) delete next[lapId]; else next[lapId] = color
+    return { lapColors: next }
+  }),
 
   // ---------- actions: view modes ----------
   setCameraMode:         (v) => set((s) => ({ cameraMode: apply(v, s.cameraMode) })),

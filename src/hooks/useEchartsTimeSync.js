@@ -39,21 +39,47 @@ import { PLAYHEAD_OVERLAY_CLASS } from '../constants'
 // .js file. Charts render it as a sibling of `<ReactECharts>` inside
 // their containerRef wrapper; this hook drives its `style.left` via raf.
 
-export function useEchartsTimeSync(echartsRef, containerRef, { tMax }) {
+/**
+ * `xAxisFromTime(t) → xValue` lets each chart declare what its x-axis
+ * actually plots. Time-axis charts pass identity (`t => t`); distance-axis
+ * charts pass an arc-length converter `t => arcLengthAtTime(refLap, t)`.
+ * The playhead overlay's pixel position uses this converter so a single
+ * source of truth (`playheadRef.current` in seconds) drives both axis
+ * variants without each chart re-implementing the rAF positioning loop.
+ *
+ * `xAxisToTime(xValue) → t` is the inverse: gesture handlers and the
+ * dataZoom event mirror use it to translate chart-x back to seconds so
+ * `playhead` and `viewport` (always in seconds — the canonical clock)
+ * stay coherent across mode swaps.
+ *
+ * `tMax` is the upper bound of whatever the chart's x-axis represents
+ * (seconds for time mode, metres for distance mode) — kept named `tMax`
+ * for back-compat.
+ */
+export function useEchartsTimeSync(
+  echartsRef,
+  containerRef,
+  { tMax, xAxisFromTime = (t) => t, xAxisToTime = (x) => x },
+) {
   const viewport = useStore((s) => s.viewport)
   const setViewport = useStore((s) => s.setViewport)
   const ignoreNextRef = useRef(false)
 
   // viewport → dataZoom (only fires when viewport actually changes — not in
-  // the playback hot path).
+  // the playback hot path). `viewport` is always seconds; convert through
+  // `xAxisFromTime` first so distance-axis charts get the right fractional
+  // window (the relationship between seconds and metres is non-linear,
+  // so simple `seconds / tMax(metres)` would warp the dataZoom range).
   useEffect(() => {
     const chart = echartsRef.current?.getEchartsInstance?.()
     if (!chart || tMax <= 0) return
-    const startPct = (viewport.tStart / tMax) * 100
-    const endPct = (viewport.tEnd / tMax) * 100
+    const xStart = xAxisFromTime(viewport.tStart)
+    const xEnd   = xAxisFromTime(viewport.tEnd)
+    const startPct = (xStart / tMax) * 100
+    const endPct   = (xEnd   / tMax) * 100
     ignoreNextRef.current = true
     safe(() => chart.dispatchAction({ type: 'dataZoom', start: startPct, end: endPct }))
-  }, [viewport.tStart, viewport.tEnd, tMax, echartsRef])
+  }, [viewport.tStart, viewport.tEnd, tMax, echartsRef, xAxisFromTime])
 
   // Playhead overlay — DOM div, NOT an ECharts markLine.
   //
@@ -100,8 +126,12 @@ export function useEchartsTimeSync(echartsRef, containerRef, { tMax }) {
         rafId = requestAnimationFrame(tick)
         return
       }
-      const ph = useStore.getState().playheadRef.current
-      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [ph, 0])?.[0], null)
+      const phTime = useStore.getState().playheadRef.current
+      // `xAxisFromTime` maps the playhead (always in seconds) onto the
+      // chart's x-axis. Identity for time-axis charts, arc-length lookup
+      // for distance-axis charts.
+      const phX_data = xAxisFromTime(phTime)
+      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [phX_data, 0])?.[0], null)
       if (phX != null && isFinite(phX) && phX >= 0) {
         const dRect = dom.getBoundingClientRect()
         const cRect = container.getBoundingClientRect()
@@ -125,7 +155,7 @@ export function useEchartsTimeSync(echartsRef, containerRef, { tMax }) {
       alive = false
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [tMax, echartsRef, containerRef])
+  }, [tMax, echartsRef, containerRef, xAxisFromTime])
 
   // resize observer → chart.resize()
   useEffect(() => {
@@ -141,10 +171,14 @@ export function useEchartsTimeSync(echartsRef, containerRef, { tMax }) {
     return () => ro.disconnect()
   }, [containerRef, echartsRef])
 
-  // Pointer gestures live in their own hook — see useChartGestures.
-  useChartGestures(echartsRef)
+  // Pointer gestures live in their own hook — see useChartGestures. The
+  // inverse converter lets the click / drag-zoom paths translate
+  // pixel→chart-x→seconds before writing the canonical clock.
+  useChartGestures(echartsRef, { xAxisToTime })
 
-  // dataZoom event → setViewport
+  // dataZoom event → setViewport. The slider's `start`/`end` are
+  // percentages of the chart's x-axis range; convert to chart-x first,
+  // then back to seconds (the viewport's storage unit).
   return useCallback((params) => {
     if (ignoreNextRef.current) {
       ignoreNextRef.current = false
@@ -154,11 +188,13 @@ export function useEchartsTimeSync(echartsRef, containerRef, { tMax }) {
     const z = params.batch ? params.batch[0] : params
     const startPct = z.start ?? 0
     const endPct = z.end ?? 100
+    const xStart = (startPct / 100) * tMax
+    const xEnd   = (endPct   / 100) * tMax
     setViewport({
-      tStart: (startPct / 100) * tMax,
-      tEnd: (endPct / 100) * tMax,
+      tStart: xAxisToTime(xStart),
+      tEnd:   xAxisToTime(xEnd),
     })
-  }, [tMax, setViewport])
+  }, [tMax, setViewport, xAxisToTime])
 }
 
 /**

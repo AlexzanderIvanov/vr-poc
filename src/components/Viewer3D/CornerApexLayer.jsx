@@ -3,6 +3,23 @@ import * as THREE from 'three'
 import { Billboard, Text } from '@react-three/drei'
 import { useStore } from '../../state/store'
 import { computeCornerAnalysis } from '../../utils/cornerAnalysis'
+import { useLapColor } from '../../hooks/useLapColor'
+
+// Thin container around `<PerLapApexes>` that subscribes to the lap's
+// presentation colour so the apex flag posts repaint live when the
+// (future) `<LapColorPicker>` writes a new colour.
+function PerLapApexesContainer({ lap, telemetry, syncOffset, lapIndex }) {
+  const lapColor = useLapColor(lap.id)
+  return (
+    <PerLapApexes
+      lap={lap}
+      telemetry={telemetry}
+      syncOffset={syncOffset}
+      lapColor={lapColor}
+      lapIndex={lapIndex}
+    />
+  )
+}
 
 /**
  * Always-on per-corner apex markers showing the **minimum corner speed**
@@ -150,12 +167,11 @@ export const CornerApexLayer = React.memo(function CornerApexLayer() {
   return (
     <>
       {visibleLaps.map((lap, i) => (
-        <PerLapApexes
+        <PerLapApexesContainer
           key={lap.id}
           lap={lap}
           telemetry={telemetryData[lap.id]}
           syncOffset={syncOffsets[lap.id]}
-          lapColor={lap.color}
           lapIndex={i}
         />
       ))}

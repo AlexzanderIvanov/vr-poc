@@ -3,8 +3,13 @@ import { Line } from '@react-three/drei'
 import * as THREE from 'three'
 import { applySyncOffset } from '../../utils/sampleLap'
 import { sampleColor } from './helpers'
+import { useLapColor } from '../../hooks/useLapColor'
 
 export const Trajectory = React.memo(function Trajectory({ lap, visible, syncOffset, telemetry }) {
+  // Plain (no-telemetry-tint) trajectory line uses the lap's presentation
+  // colour from the store — the same source the car dot and the chart
+  // series read, so they all change together when the user repaints.
+  const lapColor = useLapColor(lap.id)
   const points = useMemo(() => {
     if (!syncOffset || (syncOffset.forward === 0 && syncOffset.left === 0 && syncOffset.up === 0 && syncOffset.yaw === 0)) {
       return lap.samples.map((sample) => sample.position)
@@ -28,5 +33,5 @@ export const Trajectory = React.memo(function Trajectory({ lap, visible, syncOff
     return <Line points={points} vertexColors={vertexColors} lineWidth={3.5} transparent opacity={0.92} />
   }
 
-  return <Line points={points} color={lap.color} lineWidth={2.2} transparent opacity={lap.ghost ? 0.55 : 0.95} />
+  return <Line points={points} color={lapColor} lineWidth={2.2} transparent opacity={lap.ghost ? 0.55 : 0.95} />
 })

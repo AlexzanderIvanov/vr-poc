@@ -41,7 +41,15 @@ import { safe } from '../../utils/safe'
 const FLIP_PAD = 80   // px from the right edge at which we flip to the left
 const COL_WIDTH = 96  // readout column width in px
 
-export function ChartValueLabels({ containerRef, echartsRef, providers }) {
+/**
+ * `xAxisFromTime` is the same converter used by `useEchartsTimeSync` for
+ * the playhead overlay — see that hook's docstring. Defaults to identity
+ * so time-axis charts don't need to pass anything. Provider `getLines`
+ * receives the converted x-value (distance in position mode, time in
+ * time mode) so its internal `findValueAt(data, x)` lookup matches the
+ * data shape the chart is plotting.
+ */
+export function ChartValueLabels({ containerRef, echartsRef, providers, xAxisFromTime = (t) => t }) {
   const valueNodes = useRef([])
   const nameNodes  = useRef([])
 
@@ -61,12 +69,13 @@ export function ChartValueLabels({ containerRef, echartsRef, providers }) {
       const dom = chart.getDom?.()
       if (!dom) { rafId = requestAnimationFrame(tick); return }
 
-      const ph = useStore.getState().playheadRef.current
+      const phTime = useStore.getState().playheadRef.current
+      const phXValue = xAxisFromTime(phTime)
       const dRect = dom.getBoundingClientRect()
       const cRect = container.getBoundingClientRect()
       const offX = dRect.left - cRect.left
       const offY = dRect.top - cRect.top
-      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [ph, 0])?.[0], null)
+      const phX = safe(() => chart.convertToPixel({ gridIndex: 0 }, [phXValue, 0])?.[0], null)
 
       providers.forEach((p, i) => {
         const grid = safe(
@@ -99,9 +108,12 @@ export function ChartValueLabels({ containerRef, echartsRef, providers }) {
           }
         }
 
-        // 2. Live value column.
+        // 2. Live value column. Providers receive the x-axis-converted
+        // value (distance in position mode, seconds in time mode) so their
+        // internal `findValueAt(data, x)` lookup matches the chart's
+        // current data shape.
         if (valNode) {
-          const lines = p.getLines(ph)
+          const lines = p.getLines(phXValue)
           if (!lines?.length) {
             valNode.style.display = 'none'
           } else {
@@ -141,7 +153,7 @@ export function ChartValueLabels({ containerRef, echartsRef, providers }) {
     }
     rafId = requestAnimationFrame(tick)
     return () => { alive = false; if (rafId) cancelAnimationFrame(rafId) }
-  }, [containerRef, echartsRef, providers])
+  }, [containerRef, echartsRef, providers, xAxisFromTime])
 
   const labelStyle = {
     position: 'absolute',

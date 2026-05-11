@@ -27,6 +27,12 @@
  */
 
 const CDN_BASE = 'https://vr-raceai-me-poc.b-cdn.net'
+// Videos sit on their own pull zone, backed by their own storage zone
+// (`vr-poc-dev`). Keeping them isolated means the heavy 100+ MB MP4s can
+// have a different cache TTL / origin policy, and re-uploads can't
+// disrupt the maps / lap JSONs delivery. The split is detected purely
+// from URL path (`/assets/videos/...`) — see `assetUrl()` below.
+const CDN_BASE_VIDEOS = 'https://vr-raceai-me-poc-videos.b-cdn.net'
 
 function detectLocalhost() {
   if (typeof window === 'undefined') return true
@@ -39,20 +45,39 @@ function detectLocalhost() {
   return false
 }
 
+/**
+ * Returns:
+ *   - `'force'` — `?cdn=force` query: route all assets through the
+ *     production CDN bases regardless of hostname (lets a dev verify
+ *     the prod pull-zone wiring from localhost).
+ *   - `'off'`   — `?cdn=off` query: keep assets local (same-origin).
+ *   - `null`    — no override; fall back to hostname-based detection.
+ */
 function detectOverride() {
   if (typeof window === 'undefined') return null
   const params = new URLSearchParams(window.location?.search || '')
   const v = params.get('cdn')
-  if (v === 'force') return CDN_BASE
-  if (v === 'off') return ''
+  if (v === 'force') return 'force'
+  if (v === 'off') return 'off'
   return null
 }
 
 const override = detectOverride()
 const isLocalhost = detectLocalhost()
 
+// Resolve "should we hit the CDN?" once. Asset-type routing (videos vs
+// everything else) is done inside `assetUrl()` so each path lands on the
+// right pull zone — they're DIFFERENT URLs in prod.
+const useCdn = override === 'force' || (override !== 'off' && !isLocalhost)
+
 /** Empty string on localhost, the Bunny CDN origin elsewhere. */
-export const ASSET_BASE_URL = override !== null ? override : (isLocalhost ? '' : CDN_BASE)
+export const ASSET_BASE_URL = useCdn ? CDN_BASE : ''
+/**
+ * Same shape, but for video assets (separate pull zone in production
+ * — `vr-raceai-me-poc-videos.b-cdn.net`, backed by `vr-poc-dev` storage).
+ * `?cdn=force` / `?cdn=off` overrides apply to both bases consistently.
+ */
+export const VIDEO_BASE_URL = useCdn ? CDN_BASE_VIDEOS : ''
 
 /**
  * Rewrite a same-origin asset path through the active profile.
@@ -62,14 +87,23 @@ export const ASSET_BASE_URL = override !== null ? override : (isLocalhost ? '' :
  *   - already absolute (``http://`` or ``https://``) → returned as-is
  *   - relative (no leading slash) → returned as-is
  *   - root-relative (starts with ``/``) → CDN prefix prepended on non-localhost
+ *
+ * Path-aware routing: `/assets/videos/...` routes to `VIDEO_BASE_URL`
+ * because videos live on a dedicated pull zone (different storage zone,
+ * separate cache policy). Everything else routes to `ASSET_BASE_URL`.
  */
+const VIDEO_PATH_PREFIX = '/assets/videos/'
+
 export function assetUrl(path) {
   if (!path || typeof path !== 'string') return path
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (!path.startsWith('/')) return path
+  if (path.startsWith(VIDEO_PATH_PREFIX)) return VIDEO_BASE_URL + path
   return ASSET_BASE_URL + path
 }
 
 if (typeof window !== 'undefined' && typeof console !== 'undefined') {
-  console.log(`[config] asset profile: ${ASSET_BASE_URL || '(local)'}  host=${window.location?.hostname}`)
+  console.log(
+    `[config] asset profile: ${ASSET_BASE_URL || '(local)'}  videos: ${VIDEO_BASE_URL || '(local)'}  host=${window.location?.hostname}`,
+  )
 }

@@ -7,6 +7,7 @@ import { CornerAnalysisPanel } from '../Corners/CornerAnalysisPanel'
 import { MobilePlaybackBar } from './MobilePlaybackBar'
 import { MobileTabBar, MOBILE_TABS } from './MobileTabBar'
 import { MobileSettingsSheet } from './MobileSettingsSheet'
+import { PersistentViewer3D } from '../Viewer3D/PersistentViewer3D'
 
 /**
  * Mobile presentation root.
@@ -90,6 +91,12 @@ export function MobileApp() {
       />
 
       <MobileSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Persistent r3f Canvas — survives tab swaps between 3D / Map /
+          Telemetry / Delta. Its CSS rect tracks the `<Viewer3DSlot>`
+          rendered when the user is on the 3D tab; hidden (but still
+          mounted) on every other tab. */}
+      <PersistentViewer3D />
     </div>
   )
 }

@@ -1,5 +1,21 @@
 import React from 'react'
 import { useStore } from '../../state/store'
+import { useLapColor } from '../../hooks/useLapColor'
+
+// One row in the mobile "Visible laps" list. Subscribes to its lap's
+// presentation colour so the swatch repaints when the user picks a new
+// one. Pulled out of the parent's render loop because hooks can't be
+// called inside `.map(…)`.
+function MobileLapRow({ lap, checked, onToggle }) {
+  const lapColor = useLapColor(lap.id)
+  return (
+    <label className="mobile-lap-row">
+      <input type="checkbox" checked={checked} onChange={() => onToggle(lap.id)} />
+      <span className="lap-swatch" style={{ background: lapColor }} />
+      <span className="mobile-lap-label">{lap.label}</span>
+    </label>
+  )
+}
 
 /**
  * Bottom sheet that slides up from below the tab bar when the "More" tab
@@ -91,15 +107,12 @@ export function MobileSettingsSheet({ open, onClose }) {
             <h3>Visible laps</h3>
             <div className="mobile-laplist">
               {laps.map((lap) => (
-                <label key={lap.id} className="mobile-lap-row">
-                  <input
-                    type="checkbox"
-                    checked={visibility[lap.id] ?? true}
-                    onChange={() => toggleLap(lap.id)}
-                  />
-                  <span className="lap-swatch" style={{ background: lap.color }} />
-                  <span className="mobile-lap-label">{lap.label}</span>
-                </label>
+                <MobileLapRow
+                  key={lap.id}
+                  lap={lap}
+                  checked={visibility[lap.id] ?? true}
+                  onToggle={toggleLap}
+                />
               ))}
             </div>
           </section>

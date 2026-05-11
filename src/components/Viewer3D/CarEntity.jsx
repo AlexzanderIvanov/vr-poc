@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { sampleLapInto, sampleTelemetry, applySyncOffsetInPlace } from '../../utils/sampleLap'
 import { cloneSceneWithMaterials } from './helpers'
 import { getPlayheadRef } from '../../state/store'
+import { useLapColor } from '../../hooks/useLapColor'
 
 const WHEEL_PATTERNS = {
   fl: /frontwheelleft|wheel.*fl|fl.*wheel|front.*left|wheel_fl/i,
@@ -32,6 +33,9 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
   // Hot-path clock — read once at mount; the object is stable for the
   // lifetime of the page, only its `.current` is mutated by the playback loop.
   const currentTimeRef = getPlayheadRef()
+  // Reactive per-lap colour — sourced from the store so the picker can
+  // recolour this car (model tint + dot) without component remount.
+  const lapColor = useLapColor(lap.id)
   const { scene } = useGLTF(carUrl)
   const groupRef = useRef(null)
   const steerCenterRef = useRef(0)
@@ -106,15 +110,15 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
         if (lap.ghost) {
           material.transparent = true
           material.opacity = 0.35
-          if (material.color) material.color.lerp(new THREE.Color(lap.color), 0.5)
+          if (material.color) material.color.lerp(new THREE.Color(lapColor), 0.5)
           if ('emissive' in material) {
-            material.emissive = new THREE.Color(lap.color)
+            material.emissive = new THREE.Color(lapColor)
             material.emissiveIntensity = 0.25
           }
         }
       }
     })
-  }, [carScene, lap.color, lap.ghost])
+  }, [carScene, lapColor, lap.ghost])
 
   useEffect(() => {
     onTargetReady(lap.id, groupRef.current)
@@ -260,7 +264,7 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
       <primitive object={carScene} />
       {visible && (
         <Html position={[0, isRefLap ? 2.1 : 2.6, 0]} center distanceFactor={26} style={{ pointerEvents: 'none' }}>
-          <div className={`car-dot ${lap.ghost ? 'car-dot-ghost' : ''}`} style={{ background: lap.color, boxShadow: `0 0 6px ${lap.color}` }} />
+          <div className={`car-dot ${lap.ghost ? 'car-dot-ghost' : ''}`} style={{ background: lapColor, boxShadow: `0 0 6px ${lapColor}` }} />
         </Html>
       )}
       {visible && hasTelemetry && showCarHuds && (

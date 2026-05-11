@@ -35,7 +35,15 @@ import {
  *
  * Pixel↔data conversion uses `chart.convertFromPixel({gridIndex: N})`.
  */
-export function useChartGestures(echartsRef) {
+/**
+ * `xAxisToTime(xValue) → t (seconds)` is the inverse of `xAxisFromTime`.
+ * `convertFromPixel` returns whatever the chart's x-axis represents
+ * (seconds for time mode, metres for distance mode) — for the gesture
+ * handler to write a coherent `playhead` / `viewport` (always in
+ * seconds), distance-axis charts must supply the inverse. Defaults to
+ * identity for time-axis charts.
+ */
+export function useChartGestures(echartsRef, { xAxisToTime = (x) => x } = {}) {
   useEffect(() => {
     // ECharts is created asynchronously by echarts-for-react after the
     // wrapper div mounts. RAF-poll until ready, then attach.
@@ -48,14 +56,14 @@ export function useChartGestures(echartsRef) {
         requestAnimationFrame(attach)
         return
       }
-      cleanup = attachChartGestures(chartInst)
+      cleanup = attachChartGestures(chartInst, xAxisToTime)
     }
     requestAnimationFrame(attach)
     return () => { cancelled = true; if (cleanup) cleanup() }
-  }, [echartsRef])
+  }, [echartsRef, xAxisToTime])
 }
 
-function attachChartGestures(chartInst) {
+function attachChartGestures(chartInst, xAxisToTime) {
   const zr = chartInst.getZr()
   if (!zr) return undefined
 
@@ -72,9 +80,14 @@ function attachChartGestures(chartInst) {
   const pixelToTime = (gIdx, x) => {
     const dp = safe(() => chartInst.convertFromPixel({ gridIndex: gIdx }, [x, 0]), null)
     if (!dp || !isFinite(dp[0])) return null
+    // `dp[0]` is the chart's x-axis unit (seconds OR metres). Run it through
+    // the inverse converter to land back in seconds — the canonical clock
+    // for `playhead` and `viewport`.
+    const tSeconds = xAxisToTime(dp[0])
+    if (!isFinite(tSeconds)) return null
     const dur = useStore.getState().duration
     if (dur <= 0) return null
-    return Math.max(0, Math.min(dp[0], dur))
+    return Math.max(0, Math.min(tSeconds, dur))
   }
 
   let active = false

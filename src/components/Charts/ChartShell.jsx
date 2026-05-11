@@ -19,10 +19,29 @@ import { ChartValueLabels } from './ChartValueLabels'
  * this same JSX inline. Extracting it keeps the per-chart files focused on
  * the *option object* — the only thing that actually differs between them.
  */
-export function ChartShell({ option, valueProviders, tMax, emptyMessage = 'No data' }) {
+/**
+ * `xAxisFromTime(playheadSeconds) → xValue` lets the caller declare the
+ * chart's x-axis convention. Defaults to identity for time-axis charts;
+ * distance-axis charts pass an arc-length converter so the playhead
+ * overlay and value labels line up with the plotted data shape.
+ *
+ * `tMax` is the upper bound of whatever the chart's x-axis represents
+ * (seconds for time, metres for distance) — kept named `tMax` for
+ * back-compat with `useEchartsTimeSync`.
+ */
+export function ChartShell({
+  option,
+  valueProviders,
+  tMax,
+  xAxisFromTime = (t) => t,
+  xAxisToTime = (x) => x,
+  emptyMessage = 'No data',
+}) {
   const echartsRef = useRef(null)
   const containerRef = useRef(null)
-  const onDataZoom = useEchartsTimeSync(echartsRef, containerRef, { tMax })
+  const onDataZoom = useEchartsTimeSync(echartsRef, containerRef, {
+    tMax, xAxisFromTime, xAxisToTime,
+  })
 
   if (!option) return <div className="panel-empty">{emptyMessage}</div>
   return (
@@ -40,6 +59,7 @@ export function ChartShell({ option, valueProviders, tMax, emptyMessage = 'No da
         containerRef={containerRef}
         echartsRef={echartsRef}
         providers={valueProviders ?? []}
+        xAxisFromTime={xAxisFromTime}
       />
       <ChartPlayheadOverlay />
     </div>

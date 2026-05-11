@@ -8,8 +8,13 @@
  *     sectors: [{ number, idxStart, idxEnd, avgDelta, sectorDelta, winner,
  *                 midPosition, t1Start, t2Start, distStart, distEnd }],
  *     totalDist,
- *     lap1Id, lap2Id, lap1Color, lap2Color,
+ *     lap1Id, lap2Id,
  *   }
+ *
+ * `lap*Color` USED to live here too (snapshotted from `lap.color` at
+ * compute time) — removed because presentation colour is owned by the
+ * store's `lapColors` slice now, resolved via `useLapColor(lapId)`. The
+ * IDs above let any consumer fetch the current colour reactively.
  */
 export function computeLapDelta(laps, telemetryData) {
   if (laps.length < 2) return null
@@ -136,5 +141,5 @@ export function computeLapDelta(laps, telemetryData) {
     })
   }
 
-  return { points, sectors, totalDist, lap1Id: lap1.id, lap2Id: lap2.id, lap1Color: lap1.color, lap2Color: lap2.color }
+  return { points, sectors, totalDist, lap1Id: lap1.id, lap2Id: lap2.id }
 }

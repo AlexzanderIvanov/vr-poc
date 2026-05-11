@@ -17,6 +17,7 @@ import { CornerMarkers } from './CornerMarkers'
 import { CornerApexLayer } from './CornerApexLayer'
 import { CarEntity } from './CarEntity'
 import { CameraRig } from './CameraRig'
+import { useLapColor } from '../../hooks/useLapColor'
 
 /**
  * Composes the 3D scene: track + scenery + per-lap trajectory polylines +
@@ -195,11 +196,13 @@ export function Viewer() {
           />
         ))}
         {focusTelemetry && (
-          <TrackMarkers telemetry={focusTelemetry} telemetry2={otherTelemetry} visible={true}
-            lap={focusLap} lap2={otherLap}
-            syncOffset={focusLap ? syncOffsets[focusLap.id] : null}
-            syncOffset2={otherLap ? syncOffsets[otherLap.id] : null}
-            lap1Color={focusLap?.color} lap2Color={otherLap?.color} />
+          <ScopedTrackMarkers
+            focusLap={focusLap}
+            otherLap={otherLap}
+            focusTelemetry={focusTelemetry}
+            otherTelemetry={otherTelemetry}
+            syncOffsets={syncOffsets}
+          />
         )}
         {/* Always-on per-corner apex markers (min speed + min radius) for
             the focus lap. Detailed ref/ghost comparison still lives behind
@@ -241,7 +244,38 @@ function ScopedCornerMarkers() {
       : []
     return { refCorners, ghostCorners, pairs, sectorsWithArc }
   }, [laps, telemetryData, syncOffsets, deltaData])
-  return <CornerMarkers cornerData={cornerData} lap1Color={laps[0]?.color} lap2Color={laps[1]?.color} />
+  return <ScopedCornerMarkersInner cornerData={cornerData} refLapId={laps[0]?.id} ghostLapId={laps[1]?.id} />
+}
+
+// Thin colour-aware wrapper around `<CornerMarkers>`. Subscribes to the
+// store's `lapColors` slice via `useLapColor` so a (future) picker
+// recolours marker posts live — no prop drilling from Viewer to here.
+function ScopedCornerMarkersInner({ cornerData, refLapId, ghostLapId }) {
+  const lap1Color = useLapColor(refLapId)
+  const lap2Color = useLapColor(ghostLapId)
+  return <CornerMarkers cornerData={cornerData} lap1Color={lap1Color} lap2Color={lap2Color} />
+}
+
+// Same pattern for the brake-point flags on the trajectory. The
+// `<TrackMarkers>` API takes `lap1Color` / `lap2Color` as plain hex
+// strings — keep it that way (the component handles a lot of THREE-side
+// material wiring) and just resolve the colours on its behalf here.
+function ScopedTrackMarkers({ focusLap, otherLap, focusTelemetry, otherTelemetry, syncOffsets }) {
+  const lap1Color = useLapColor(focusLap?.id)
+  const lap2Color = useLapColor(otherLap?.id)
+  return (
+    <TrackMarkers
+      telemetry={focusTelemetry}
+      telemetry2={otherTelemetry}
+      visible={true}
+      lap={focusLap}
+      lap2={otherLap}
+      syncOffset={focusLap ? syncOffsets[focusLap.id] : null}
+      syncOffset2={otherLap ? syncOffsets[otherLap.id] : null}
+      lap1Color={lap1Color}
+      lap2Color={lap2Color}
+    />
+  )
 }
 
 // Panel adapter for the layout registry — the Viewer component is fully

@@ -84,6 +84,31 @@ export const MODE_LABELS = {
   compare_projected_raw: 'Raw Projected',
 }
 
+// ---------------------------------------------------------------------------
+// Lap-color palette
+// ---------------------------------------------------------------------------
+//
+// Per-lap presentation colours used across every visualisation surface
+// (3D trajectory line, car dot, model material tint, corner-apex flag
+// posts, chart series, HUD swatches, …). Index 0 = ref lap, index 1 =
+// first ghost, etc. Indices beyond `length` wrap with modulo so the app
+// never crashes on N-lap comparisons.
+//
+// Override mechanism: `state.lapColors[lapId] = '#hex'` (written by a
+// future `<LapColorPicker>`). The resolver in `hooks/useLapColor.js`
+// prefers the override and falls back to this palette by lap index.
+// The manifest JSONs still carry a baked-in `lap.color` but it is now
+// IGNORED — colours live entirely on the presentation layer so the user
+// can recolour without touching data, and so the picker propagates
+// through the same reactive store mechanism every other UI piece uses.
+export const LAP_COLOR_PALETTE = [
+  '#3b82f6',  // blue   — ref lap (laps[0])
+  '#ef4444',  // red    — first ghost (laps[1])
+  '#10b981',  // green  — second ghost (laps[2]) — future
+  '#f59e0b',  // amber  — third ghost            — future
+  '#a855f7',  // purple — fourth                 — future
+]
+
 // Chart colors
 export const CHART_COLORS = {
   tps: '#4caf50',
