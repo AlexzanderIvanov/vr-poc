@@ -1378,11 +1378,6 @@ body {
 .panel-handle-h,
 .panel-handle-v {
   position: relative;
-  /* Subtle always-on tint so users can SEE the full 16-px hit zone
-     instead of aiming at the tiny `::after` dot and misclicking onto
-     the chart. The whole band is the resize target — make it visible. */
-  background: rgba(255, 255, 255, 0.04);
-  transition: background 0.12s ease;
   flex-shrink: 0;
 }
 /* While the user is dragging a layout-panel separator, mute all chart
@@ -1408,78 +1403,16 @@ body.panel-resizing .echarts-for-react,
 }
 /* Generous physical hit-target so a click anywhere in this band reliably
    grabs the resize handle instead of leaking into the chart underneath.
-   The visible indicator is the `::after` pseudo (4 px × 28 px line in the
-   middle); the rest of the 16 px is transparent, so visually the layout
-   doesn't gain a thick bar even though the handle has real estate. */
+   Fully invisible — the only affordance is the cursor changing shape
+   when the pointer enters the zone. No hover highlight, no grip line,
+   no active-drag colour: just `col-resize` / `row-resize`. */
 .panel-handle-h { width: 16px; cursor: col-resize; }
 .panel-handle-v { height: 16px; cursor: row-resize; }
 
-/* CSS-Grid flat layout splitters — same visual treatment as the
-   `react-resizable-panels` handles above, but they're absolutely-
-   positioned overlays inside the grid container, so a drag on either
-   one changes ONLY its own axis. No nested Group, no constraint
-   cascade, no cursor decoupling. */
-.grid-splitter-v,
-.grid-splitter-h {
-  background: rgba(255, 255, 255, 0.04);
-  transition: background 0.12s ease;
-}
-.grid-splitter-v:hover,
-.grid-splitter-h:hover {
-  background: rgba(76, 175, 200, 0.45);
-}
-.grid-splitter-v::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 2px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.18);
-  transform: translate(-50%, -50%);
-  border-radius: 1px;
-  pointer-events: none;
-}
-.grid-splitter-h::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  height: 2px;
-  width: 28px;
-  background: rgba(255, 255, 255, 0.18);
-  transform: translate(-50%, -50%);
-  border-radius: 1px;
-  pointer-events: none;
-}
-.panel-handle-h:hover,
-.panel-handle-v:hover,
-.panel-handle-h[data-resize-handle-active],
-.panel-handle-v[data-resize-handle-active] {
-  background: rgba(76, 175, 200, 0.45);
-}
-.panel-handle-h::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 1px;
-  width: 2px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.18);
-  transform: translateY(-50%);
-  border-radius: 1px;
-}
-.panel-handle-v::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 1px;
-  height: 2px;
-  width: 28px;
-  background: rgba(255, 255, 255, 0.18);
-  transform: translateX(-50%);
-  border-radius: 1px;
-}
+/* CSS-Grid flat layout splitters — same treatment as the
+   `react-resizable-panels` handles above. Invisible; pointer-only. */
+.grid-splitter-v { cursor: col-resize; }
+.grid-splitter-h { cursor: row-resize; }
 
 .panel-frame {
   display: flex;
