@@ -39,16 +39,37 @@ export function DeltaChartEcharts({ deltaData, laps }) {
     const data = deltaData.points.map((p) => [byDistance ? p.dist : p.t1, p.delta])
     return [{
       gridIndex: 0,
-      rowName: 'DELTA',
-      rowNameColor: '#7b8399',
-      getLines: (x) => {
-        const v = findValueAt(data, x)
+      // Structured row — matches the format every other chart uses
+      // since the value-labels redesign. Dot colour shifts with sign
+      // (red = behind ref, green = ahead). Channel label "DELTA" sits
+      // next to the value; unit "s" suffixes it.
+      getLines: (refX, cursorX) => {
+        // Main value at the REF position; secondary cursor + delta
+        // when the mouse is hovering a different x.
+        const v = findValueAt(data, refX)
         if (v == null) return null
         const sign = v >= 0 ? '+' : ''
-        // Red when behind ref (positive delta), green when ahead. Matches
-        // the chart's red/green area gradient.
         const color = v >= 0 ? CHART_COLORS.delta_slower : CHART_COLORS.delta_faster
-        return [{ text: `${sign}${v.toFixed(3)}s`, color, opacity: 1 }]
+        let cursorValue = null
+        let delta = null
+        if (cursorX != null && Math.abs(cursorX - refX) > 1e-6) {
+          const cv = findValueAt(data, cursorX)
+          if (cv != null) {
+            const csign = cv >= 0 ? '+' : ''
+            cursorValue = `${csign}${cv.toFixed(3)}`
+            const d = cv - v
+            delta = (d >= 0 ? '+' : '') + d.toFixed(3)
+          }
+        }
+        return [{
+          label: 'DELTA',
+          value: `${sign}${v.toFixed(3)}`,
+          cursorValue,
+          delta,
+          color,
+          unit: 's',
+          opacity: 1,
+        }]
       },
     }]
   }, [deltaData, byDistance])
@@ -77,27 +98,28 @@ export function DeltaChartEcharts({ deltaData, laps }) {
       : deltaData.points.map((p) => [p.t1, p.delta, p.dist])
     return {
       animation: false,
-      grid: { left: 36, right: 16, top: 22, bottom: 22, containLabel: false },
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(9, 11, 16, 0.92)',
-        borderColor: 'rgba(255,255,255,0.12)',
-        textStyle: { color: '#cfd6e8', fontSize: 11 },
-        formatter: (params) => {
-          const p = params[0]
-          if (!p) return ''
-          // Third tuple element is whichever axis the chart is NOT plotting,
-          // so the tooltip always shows both time and distance for context.
-          const [primary, delta, secondary] = p.value
-          const tStr = byDistance ? secondary.toFixed(2) : primary.toFixed(2)
-          const dStr = byDistance ? primary.toFixed(0)   : secondary.toFixed(0)
-          return `<div style="font-family:monospace">t=${tStr}s<br/>d=${dStr}m<br/>Δ=${delta >= 0 ? '+' : ''}${delta.toFixed(3)}s</div>`
+      grid: { left: 52, right: 16, top: 22, bottom: 22, containLabel: false },
+      // Top-level axisPointer — dashed white hover line, linked to
+      // the telemetry chart via `echarts.connect()` in ChartShell so
+      // one cursor tracks across both charts. `triggerTooltip: false`
+      // keeps the line on without dragging a floating tooltip box
+      // along — the chart header bar + corner value chip already
+      // show every relevant number plus delta.
+      axisPointer: {
+        show: true,
+        type: 'line',
+        triggerTooltip: false,
+        label: { show: false },
+        lineStyle: {
+          color: 'rgba(255, 255, 255, 0.45)',
+          width: 1,
+          type: 'dashed',
         },
-        // No hover crosshair — the persistent playhead overlay already
-        // shows the user's current time-position; a second line on
-        // hover competes with it.
-        axisPointer: { type: 'none' },
       },
+      // Floating tooltip suppressed — see comment in
+      // TelemetryChartEcharts. The corner chip + chart header bar
+      // already display the same data plus delta column.
+      tooltip: { show: false },
       xAxis: {
         type: 'value',
         min: 0,
@@ -114,12 +136,20 @@ export function DeltaChartEcharts({ deltaData, laps }) {
       },
       yAxis: {
         type: 'value',
-        // `name: ''` is explicit (not omitted) because ECharts' default
-        // merge keeps the prior `name: 'TIME DELTA'` across HMR option
-        // swaps, and that would re-reserve the left gutter we just sized
-        // for the tick labels.
-        name: '',
-        nameGap: 0,
+        // Vertical channel name in the scale gutter — matches the
+        // telemetry chart's rotated-yAxis-name convention so the
+        // channel label always lives in the same place across the
+        // whole charts area.
+        name: 'DELTA',
+        nameLocation: 'middle',
+        nameRotate: 90,
+        nameGap: 32,
+        nameTextStyle: {
+          color: '#cfd6e8',
+          fontSize: 11,
+          fontWeight: 600,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        },
         // Signed time-delta scale on the left. Hide min/max so the labels
         // never push past the chart's vertical extents.
         axisLabel: {
@@ -195,6 +225,16 @@ export function DeltaChartEcharts({ deltaData, laps }) {
       xAxisFromTime={xAxisFromTime}
       xAxisToTime={xAxisToTime}
       emptyMessage="No delta yet"
+      gridLeft={52}
+      gridRight={16}
+      // Hide the sector header AND the cursor / Δ header on the
+      // delta chart — the telemetry chart above it already shows
+      // them, and stacking duplicate strips in the same overlay is
+      // visual noise. `ChartShell` keeps both flags default-on so
+      // any new chart panel gets them automatically; only this one
+      // opts out.
+      showSectorBar={false}
+      showHeaderBar={false}
     />
   )
 }

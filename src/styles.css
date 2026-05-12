@@ -553,6 +553,25 @@ body {
   background: rgba(9, 11, 16, 0.85);
 }
 
+/* Distance readout at the midpoint of the ref→ghost line drawn in
+   position-compare mode. Compact yellow chip — same colour family as
+   the connector line so the two read as one visual element. */
+.car-distance-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffd166;
+  background: rgba(9, 11, 16, 0.78);
+  border: 1px solid rgba(255, 209, 102, 0.55);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.85);
+  user-select: none;
+  pointer-events: none;
+  transform: translateY(-50%);  /* anchor at vertical centre, sits ON the midpoint */
+}
+
 .hud-delta-behind {
   color: #f44336;
   background: rgba(244, 67, 54, 0.15);
@@ -1566,12 +1585,24 @@ body.panel-resizing .echarts-for-react,
 .mobile-shell {
   position: fixed;
   inset: 0;
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  /* Flex column so the layout adapts to whichever children are
+     present — the header is now conditionally rendered (hidden on
+     the 3D tab), and the old playback bar was removed entirely.
+     With the previous fixed-template CSS Grid (`auto 1fr auto auto`),
+     removing children let the remaining items grab the 1fr track,
+     which pulled the tab bar to the top of the screen when the
+     header was hidden. Flex `1 1 auto` on the body keeps the body
+     filling the leftover space regardless of how many siblings
+     exist. */
+  display: flex;
+  flex-direction: column;
   background: #090b10;
   color: #cfd6e8;
   overflow: hidden;
 }
+.mobile-header { flex: 0 0 auto; }
+.mobile-body   { flex: 1 1 auto; }
+.mobile-tabbar { flex: 0 0 auto; }
 
 .mobile-header {
   display: flex;
@@ -1861,6 +1892,499 @@ body.panel-resizing .echarts-for-react,
   cursor: pointer;
 }
 
+/* ── Mobile 3D-view HUD overlay (g-force friction circle widget) ────
+   Compact instrument cluster floating over the 3D scene. The speed
+   widget moved to the bottom scrolling chart; only the friction
+   circle remains here. The overlay itself is pointer-transparent;
+   the friction-circle widget captures taps locally if needed. */
+.m-hud-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.m-hud-overlay > * { pointer-events: auto; }
+
+/* Shared sizing for the two top-corner HUD widgets — top-left map
+   and top-right friction circle. Same square footprint so they
+   read as a matched pair. The Viewer.jsx-level minimap overlay
+   (`.viewer3d-minimap-overlay`) is hidden on mobile (see media
+   query below) so only OUR HUD map remains. */
+.m-hud-map,
+.m-hud-gforce {
+  width: 160px;
+  height: 160px;
+  box-sizing: border-box;
+}
+
+/* Top-left mini track map. Interactable on mobile — sector clicks
+   jump the playback to that sector, same as the desktop track-map
+   panel. `pointer-events: auto`; the React component attaches
+   `onClick` with `stopPropagation` so taps on the map area don't
+   also bubble up as a tap-to-play. The track canvas fills the
+   whole rectangle (panel-frame chrome stripped below). */
+.m-hud-map {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 0;
+  background: rgba(9, 11, 16, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.m-hud-map > * {
+  /* TrackMapPanel renders a `<PanelFrame>` wrapper. Force the
+     wrapper to fill the box so the inner canvas / SVG sizes to our
+     overlay rather than using its own panel-default dimensions. */
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+/* Strip every layer of chrome the TrackMap component ships with for
+   regular layout-grid use: panel-frame header bar, panel-frame body
+   padding, the `.panel-trackmap` dark fill, the rounded corners,
+   the lap-colour legend at the top and the click-sector hint at
+   the bottom. After this the map's drawn surface is essentially
+   the whole `.m-hud-map` box. */
+.m-hud-map .panel-frame,
+.m-hud-map .panel-frame-body,
+.m-hud-map .panel-trackmap,
+.m-hud-map .track-map-panel {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  padding: 0;
+}
+.m-hud-map .panel-frame-header { display: none; }
+.m-hud-map .track-map-legend,
+.m-hud-map .track-map-hint { display: none; }
+
+/* Hide the duplicate minimap the Viewer3D component injects (240×240
+   `.viewer3d-minimap-overlay`) on mobile — we own the top-left map
+   slot via `.m-hud-map`. Desktop keeps the original. */
+@media (max-width: 768px) {
+  .viewer3d-minimap-overlay { display: none; }
+}
+
+/* Bottom toolbar — single horizontal strip sitting just above the
+   scrolling chart. Three slots:
+     • left  : ref lap-time chip, coloured by lap
+     • centre: shortcut pills (camera-cycle + compare-mode) grouped
+               into a segmented control
+     • right : ghost lap-time chip, coloured by lap
+   Container is `pointer-events: none` so the gaps still pass clicks
+   through to the tap-to-play handler; only the pills capture taps. */
+.m-hud-toolbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 138px; /* lower chart height (130px) + 8px breathing room */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  pointer-events: none;
+}
+.m-hud-toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  pointer-events: auto;
+  /* Segmented-control look: the two pills sit edge-to-edge inside a
+     single rounded shell. The buttons inside flatten their inner
+     borders so the join reads as one bar. */
+  background: rgba(9, 11, 16, 0.78);
+  border: 1px solid rgba(76, 175, 200, 0.45);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.m-hud-toolbar-center .m-hud-shortcut {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.m-hud-toolbar-center .m-hud-shortcut + .m-hud-shortcut {
+  border-left: 1px solid rgba(76, 175, 200, 0.35);
+}
+
+/* Cyan-accented shortcut pill (used for both camera-cycle and
+   compare-mode toggle). `pointer-events: auto` here so taps land
+   on the button rather than passing through to the play handler. */
+.m-hud-shortcut {
+  pointer-events: auto;
+  appearance: none;
+  background: rgba(9, 11, 16, 0.78);
+  border: 1px solid rgba(76, 175, 200, 0.45);
+  color: #4cafc8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  min-height: 28px;
+  border-radius: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-hud-shortcut:active { background: rgba(76, 175, 200, 0.20); }
+
+/* Lap-time label, coloured inline via JS from `lapColors[lap.id]`.
+   `currentColor` border draws the lap accent as a thin outline so
+   the chip reads as "this lap" at a glance. */
+.m-hud-lap-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(9, 11, 16, 0.62);
+  border: 1px solid currentColor;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 6px currentColor;
+  pointer-events: none;
+}
+
+@media (max-width: 380px) {
+  /* Narrow phones — shrink the toolbar pills + lap-times so they fit
+     on a 320-360 px wide screen alongside both lap-time chips. The
+     map + friction-circle box size is overridden below in their own
+     @media block so they stay paired. */
+  .m-hud-shortcut { padding: 4px 10px; font-size: 10px; min-height: 24px; }
+  .m-hud-lap-time { font-size: 12px; padding: 1px 6px; }
+  .m-hud-toolbar { bottom: 120px; }
+}
+
+/* Top-right g-force widget — friction circle + numeric readouts.
+   Outer box size is fixed (140×140 — matching `.m-hud-map`) so the
+   two top-corner widgets read as a matched pair. The circle takes
+   the bulk of the height; the 3-channel readouts collapse to a
+   single tight row at the bottom. */
+.m-hud-gforce {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  background: rgba(9, 11, 16, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.m-hud-gforce-circle {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.m-hud-gforce-readouts {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-around;
+  gap: 4px;
+  font-size: 10px;
+  padding-top: 2px;
+}
+.m-hud-g-row {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.m-hud-g-key {
+  color: #8a93a3;
+  font-size: 9px;
+}
+.m-hud-g-val {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+/* Narrow phones (iPhone SE etc.) — shrink both top widgets in
+   lock-step so they keep matching, and bump the toolbar a tiny bit
+   so the lap-times don't crowd the chart. */
+@media (max-width: 380px) {
+  .m-hud-map,
+  .m-hud-gforce { width: 130px; height: 130px; }
+}
+
+/* ── Mobile lower chart (RaceBox-style scrolling speed + delta) ────
+   Pinned to the bottom of the 3D viewer body, drawn over the scene
+   with a translucent backdrop. The playhead is rendered by the
+   chart itself as a dashed vertical line at the canvas's horizontal
+   centre; data slides under it. See MobileLowerChart.jsx for the
+   full design notes. */
+.m-lower-chart {
+  position: absolute;
+  /* `top: auto` cancels the `inset: 0` that `.mobile-body > *`
+     stamps on every direct child — without it, top + bottom + height
+     all-set would anchor the strip to the TOP of the body instead of
+     the bottom. */
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 130px;
+  /* The persistent R3F Canvas is `position: fixed` at z-index 1 and
+     covers the whole body when on the 3D tab — without an explicit
+     z-index here, the canvas would paint over the chart and hide it.
+     Same z-index the HUD uses for the same reason. */
+  z-index: 5;
+  background: rgba(9, 11, 16, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  /* Whole strip captures pointer events so the drag-to-scrub
+     gesture can fire. The canvas inside fills the box. */
+  pointer-events: auto;
+  touch-action: none; /* let our pointer handlers own horizontal swipes */
+}
+.m-lower-chart-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.m-lower-chart-mode {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  appearance: none;
+  background: rgba(9, 11, 16, 0.78);
+  border: 1px solid rgba(76, 175, 200, 0.45);
+  color: #4cafc8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  min-height: 24px;
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-lower-chart-mode:active {
+  background: rgba(76, 175, 200, 0.20);
+}
+@media (max-width: 380px) {
+  .m-lower-chart { height: 112px; }
+}
+
+/* ── Mobile telemetry panel (speed + g-force cards) ─────────────────
+   Glanceable single-screen layout — see MobileTelemetryPanel.jsx
+   header for the design rationale. Two stacked "hero" cards, each
+   dominated by a big primary readout and a secondary detail block.
+   No on-graph chips, no rotated axis names — the value chips
+   themselves ARE the chart. */
+.m-tel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #5a6378;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+.m-tel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: #090b10;
+  /* Phones often have a bottom safe area (home indicator). The
+     playback bar + tabbar handle the bottom, but if either is
+     hidden in a future variant we still want the panel to stop
+     short of the edge. */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.m-tel-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.m-tel-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.m-tel-card-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #5a6378;
+  font-weight: 600;
+}
+.m-tel-card-stat {
+  font-size: 11px;
+  color: #8a93a3;
+}
+/* Unit-toggle tap target — large enough to hit one-handed (≥ 36 px
+   tall per WCAG 2.5.5 minimum target). */
+.m-tel-unit-btn {
+  appearance: none;
+  background: rgba(76, 175, 200, 0.10);
+  border: 1px solid rgba(76, 175, 200, 0.30);
+  color: #4cafc8;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  min-height: 32px;
+  border-radius: 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-tel-unit-btn:active {
+  background: rgba(76, 175, 200, 0.25);
+}
+
+/* Hero speed readout — biggest single number on the panel, must read
+   from arm's length while glancing. Tabular-nums so digit changes
+   don't jitter. */
+.m-tel-hero {
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1.0;
+  color: #fff;
+  text-align: center;
+  margin: 8px 0 12px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Horizontal gauge — current speed as a % of the session peak. Reads
+   secondary context for the hero number ("how fast vs. the lap max"). */
+.m-tel-gauge {
+  margin: 4px 0 10px;
+}
+.m-tel-gauge-track {
+  position: relative;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.m-tel-gauge-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #4cafc8 0%, #66e1ff 100%);
+  border-radius: 4px;
+  width: 0%;
+  transition: width 80ms linear;
+}
+.m-tel-gauge-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #5a6378;
+  margin-top: 4px;
+}
+
+/* Per-lap chips — compact, side-by-side. One row of chips even with
+   two laps fits horizontally on a 360-wide phone. */
+.m-tel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.m-tel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.m-tel-chip-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.m-tel-chip-label {
+  color: #8a93a3;
+  font-size: 11px;
+}
+.m-tel-chip-val {
+  color: #fff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* G-force card — friction circle to the left, per-lap readouts to the
+   right. Aspect ratio 1:1 on the canvas wrapper. */
+.m-tel-gforce-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.m-tel-friction {
+  flex: 0 0 auto;
+  width: 160px;
+  aspect-ratio: 1 / 1;
+  /* `<VRFrictionCircle/>` expects to fill its parent; the inner canvas
+     auto-resizes via its ResizeObserver so any wrapper size works. */
+}
+@media (max-width: 380px) {
+  /* Tighter friction circle on narrow phones (iPhone SE etc.) so the
+     numeric readout column doesn't get squeezed below ~110 px. */
+  .m-tel-friction { width: 130px; }
+}
+.m-tel-g-readouts {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.m-tel-g-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.m-tel-g-lap {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.m-tel-g-row {
+  display: grid;
+  grid-template-columns: 30px 1fr 14px;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.m-tel-g-key {
+  color: #5a6378;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+.m-tel-g-val {
+  color: #fff;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.m-tel-g-unit {
+  color: #5a6378;
+  font-size: 10px;
+}
+
 /* Fallback rendered by <Viewer3DErrorBoundary> when the 3D Canvas / drei
    asset chain throws. Sized to match the persistent viewer's wrapper so
    the panel slot still reserves its grid cell. */
@@ -2015,4 +2539,1172 @@ body.panel-resizing .echarts-for-react,
   border-radius: 6px;
   font-family: monospace;
   font-size: 11px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   VR layout (/vr route) — full-screen 3D with transparent overlays.
+
+   Single page-fill shell, three layered surfaces:
+     • viewer slot  z=0  full-bleed (the 3D Canvas tracks this rect)
+     • map overlay  z=10 top-left corner (zoomable mini-map)
+     • chart stack  z=10 right edge (transparent tiles)
+     • playback bar z=20 bottom edge (chrome)
+
+   Everything sits inside `.vr-shell { position: fixed; inset: 0; }` so
+   it doesn't have to compete with the desktop / mobile shells for
+   layout space.  `pointer-events` is the load-bearing trick: the
+   shell ITSELF is `none` so the 3D scene below can be clicked /
+   orbited, then individual overlays re-enable `auto` for their
+   children.
+   ─────────────────────────────────────────────────────────────────── */
+
+.vr-shell {
+  position: fixed;
+  inset: 0;
+  background: #0b0e14;
+  overflow: hidden;
+  pointer-events: none;
+}
+.vr-shell > * { pointer-events: auto; }
+
+.vr-viewer-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Hide the `<Viewer>`'s built-in top-left minimap whenever the VR
+   shell is on the page — the `<VRTrackMap>` overlay below is the
+   route's intended map, and `.viewer3d-minimap-overlay` would
+   otherwise paint a second contour at the same corner. `:has`
+   keeps the rule scoped: any non-VR route still gets its embedded
+   minimap. */
+body:has(.vr-shell) .viewer3d-minimap-overlay { display: none; }
+
+/* Fully transparent — same treatment as `.viewer3d-minimap-overlay` on
+   the desktop layout. Only the contour + sector ticks show against
+   the 3D scene; no panel chrome, no backdrop. The 16-px-larger size
+   gives a bit more room than the desktop minimap since it doubles as
+   the zoom / pan control surface. */
+.vr-map-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 320px;
+  height: 320px;
+  z-index: 10;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.vr-map-overlay .vr-trackmap { width: 100%; height: 100%; cursor: grab; }
+.vr-map-overlay .vr-trackmap:active { cursor: grabbing; }
+/* Strip every layer of chrome the TrackMap ships with — same selectors
+   the `.viewer3d-minimap-overlay` block uses. The canvas elements
+   themselves draw on a fully transparent surface (because we pass
+   `minimal` to `<TrackMap>`), so once the chrome is gone only the
+   outline + sector ticks show. */
+.vr-map-overlay .panel-frame,
+.vr-map-overlay .panel-frame-body,
+.vr-map-overlay .panel-trackmap,
+.vr-map-overlay .track-map-panel {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  padding: 0;
+}
+.vr-map-overlay .panel-frame-header { display: none; }
+.vr-map-overlay .track-map-legend,
+.vr-map-overlay .track-map-hint {
+  display: none !important;
+}
+
+/* Friction-circle / g-g diagram pinned just below the map. Same
+   visual treatment as the map: fully transparent, only the contour
+   + reference rings + trail show against the 3D scene. Width
+   matches the map (320 px). Height stretches to the playback bar
+   on tall screens; on shorter screens the canvas auto-shrinks to
+   stay square via its container's `min(width, height)` sizing. */
+.vr-friction-overlay {
+  position: absolute;
+  top: 352px;          /* 16 (map-top) + 320 (map-h) + 16 (gap) */
+  left: 16px;
+  width: 320px;
+  /* Cap height so the circle never overlaps the playback bar (124 px
+     from the bottom inc. its 16 px gap). 1fr-style would need flex;
+     a simple `max-height` works because the canvas reads its
+     bounding-rect for sizing anyway. */
+  height: 320px;
+  max-height: calc(100vh - 352px - 124px);
+  z-index: 10;
+  pointer-events: none;   /* no interaction yet — pure visualisation */
+}
+.vr-friction-circle {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.vr-friction-circle canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Charts column on the right — transparent tiles stacked vertically.
+   Each tile is fixed-width and tall enough for the multi-grid
+   telemetry chart to read. The panel-frame's normal dark background
+   is overridden to a faint translucent tint so the 3D scene shows
+   through. */
+.vr-charts-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 124px;          /* 92 (bar) + 16 (bar-to-edge) + 16 (chart-to-bar) */
+  /* `width` is set via inline style by VRChartsStack — drag the
+     left-edge handle to resize. Inline override needs flex on the
+     parent so the children obey their own flex-basis below. */
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.vr-charts-overlay > * { pointer-events: auto; }
+
+/* ── Live value-readout chips on each chart row ──────────────────────
+   Compact two-tier layout. Main row (always shown) is just dot +
+   value-at-ref + unit; the channel label was dropped to save ~36 px
+   width because the rotated y-axis `name` already identifies the
+   row. Hover sub-row (only when the mouse is on a chart at a
+   different x than the ref) adds cursor value + signed delta below
+   the main row, indented under the dot. The chip only expands
+   vertically on hover — never wider — so it consumes minimum
+   horizontal real estate at rest. */
+.chart-value-box {
+  position: absolute;
+  display: none;          /* set to 'flex' by ChartValueLabels when populated */
+  flex-direction: column;
+  gap: 0;
+  padding: 2px 5px;
+  background: rgba(9, 11, 16, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+.chart-value-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.chart-value-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.chart-value-num {
+  color: #ffffff;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: right;
+  margin-left: auto;
+}
+.chart-value-unit {
+  color: #5a6378;
+  font-size: 10px;
+  min-width: 14px;
+  text-align: left;
+}
+/* Hover sub-row — cursor value + signed delta. Cyan accent so it
+   visually links to the dashed white axisPointer crosshair the
+   user moved with the mouse, while still being subordinate to the
+   white main value. Indented past the dot column so the eye groups
+   it with the lap above. */
+.chart-value-hover-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-left: 13px;
+  font-size: 10px;
+  line-height: 1.1;
+  margin-bottom: 1px;
+}
+.chart-value-cursor-num {
+  color: rgba(184, 232, 243, 0.78);
+  font-weight: 600;
+  min-width: 30px;
+  text-align: right;
+  margin-left: auto;
+}
+.chart-value-delta {
+  color: #b8e8f3;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: right;
+  letter-spacing: 0.2px;
+}
+
+/* ── Chart header bar — Δ-cursor toolbar ─────────────────────────────
+   Sits above the sector header on every chart shell. Owns the cursor
+   readouts (live t / d) and the Δ button that captures the current
+   cursor as a reference anchor for delta cursor mode. */
+.chart-header-bar {
+  flex: 0 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 2px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  user-select: none;
+  color: #cfd6e8;
+}
+.chart-header-delta-btn {
+  height: 18px;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+  color: #cfd6e8;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  margin: 0 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.chart-header-delta-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.chart-header-delta-btn.is-active {
+  background: rgba(76, 175, 200, 0.30);
+  border-color: rgba(76, 175, 200, 0.7);
+  color: #b8e8f3;
+}
+.chart-header-readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.chart-header-key {
+  color: #5a6378;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+.chart-header-val {
+  color: #ffffff;
+  font-weight: 700;
+  min-width: 40px;
+  text-align: right;
+}
+.chart-header-unit {
+  color: #5a6378;
+  font-size: 10px;
+}
+.chart-header-readout.chart-header-delta .chart-header-val {
+  color: #b8e8f3;
+}
+.chart-header-readout.chart-header-delta .chart-header-key {
+  color: #7fa8b8;
+}
+.chart-header-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 4px;
+}
+
+/* ── Chart shell + sector header ─────────────────────────────────────
+   Layout: flex column. The sector bar sits as a fixed-height row at
+   the top; the ECharts canvas + value labels + playhead overlay fill
+   the remaining height. The bar's inner band is padded to match the
+   chart's grid `left / right` so sector boundaries on the bar align
+   with the corresponding x-axis ticks on the chart below. */
+.chart-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.chart-shell-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Delta-window rectangle — a soft cyan tint between the playhead (ref)
+   and the target. Sits BEHIND the two vertical lines (z-index 2 vs.
+   the playhead's 4 / target's 5) so the lines stay readable against
+   it. No border — just a fill — so the window reads as a "selection
+   band" rather than a competing UI chrome element. */
+.chart-delta-window-overlay {
+  background: rgba(76, 175, 200, 0.06);
+  border-top: 1px dashed rgba(255, 167, 38, 0.25);
+  border-bottom: 1px dashed rgba(255, 167, 38, 0.25);
+}
+
+/* ── Telemetry chart + right-side Channels column wrapper ───────────── */
+/* Pins the channels column to the right of the chart inside the same
+   panel cell. Flex row, chart fills the remaining width. */
+.telemetry-with-channels {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.telemetry-chart-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+.channel-list-column {
+  flex: 0 0 auto;
+  width: 132px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  min-height: 0;
+}
+.channel-list-header {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #5a6378;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-transform: uppercase;
+}
+.channel-list-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+.channel-list-row {
+  display: grid;
+  /* grip | name | value | unit | remove×. The remove column is
+     auto-sized; for non-user-added rows that column is empty so the
+     grid collapses it to 0. */
+  grid-template-columns: 10px 1fr auto auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 4px;
+  /* Left-edge accent bar: filled lap-accent for plotted rows, invisible
+     otherwise. 3 px keeps it readable without crowding the label. */
+  border-left: 3px solid transparent;
+  /* Hairline divider between rows so the eye can scan the list as
+     discrete entries rather than a single block of text. Last row's
+     border is hidden to avoid doubling against the column edge. */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  line-height: 14px;
+  color: #6c7585;
+  cursor: grab;
+  user-select: none;
+}
+.channel-list-row:last-child {
+  border-bottom: none;
+}
+.channel-list-row:active {
+  cursor: grabbing;
+}
+.channel-list-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.channel-list-row.is-plotted {
+  border-left-color: #4cafc8;
+  color: #cfd6e8;
+}
+.channel-list-grip {
+  color: #3e4757;
+  font-size: 9px;
+  letter-spacing: -2px;
+  text-align: center;
+  line-height: 8px;
+  /* Two stacked colons rendered tightly as a six-dot drag grip. The
+     grip is decorative — the entire row is draggable, not just this
+     cell — but it telegraphs "you can drag this" at a glance. */
+  pointer-events: none;
+}
+.channel-list-row:hover .channel-list-grip {
+  color: #6c7585;
+}
+.channel-list-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.channel-list-value {
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-align: right;
+  min-width: 38px;
+}
+.channel-list-row:not(.is-plotted) .channel-list-value {
+  color: #8a93a3;
+}
+.channel-list-unit {
+  color: #5a6378;
+  font-size: 9px;
+  min-width: 22px;
+  text-align: left;
+}
+.channel-list-remove {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: #6c7585;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.channel-list-remove:hover {
+  background: rgba(244, 67, 54, 0.25);
+  color: #fff;
+}
+
+/* Per-grid drop zones — rendered absolute over each chart grid while
+   a channel drag is in progress. Default state is a thin dashed
+   accent border so the user can see every available drop target at
+   once. `is-hover` is the one currently under the pointer and gets a
+   brighter fill + solid border to confirm "drop here lands on THIS
+   grid". The label sits in the upper-right of the zone so it's
+   visible regardless of where the trace runs. */
+.chart-drop-zone {
+  border: 1.5px dashed rgba(76, 175, 200, 0.55);
+  background: rgba(76, 175, 200, 0.04);
+  border-radius: 3px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 2px 6px;
+  transition: background-color 80ms linear, border-color 80ms linear;
+}
+.chart-drop-zone.is-hover {
+  border-style: solid;
+  border-color: rgba(76, 175, 200, 0.95);
+  background: rgba(76, 175, 200, 0.18);
+}
+.chart-drop-zone-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #4cafc8;
+  background: rgba(13, 17, 24, 0.85);
+  border: 1px solid rgba(76, 175, 200, 0.55);
+  border-radius: 2px;
+  padding: 1px 6px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.chart-drop-zone.is-hover .chart-drop-zone-label {
+  color: #fff;
+  background: rgba(76, 175, 200, 0.95);
+  border-color: rgba(76, 175, 200, 1);
+}
+.chart-drop-zone-new {
+  border-style: dotted;
+  border-color: rgba(150, 180, 200, 0.45);
+  background: rgba(150, 180, 200, 0.04);
+}
+.chart-drop-zone-new .chart-drop-zone-label {
+  color: #b0bccc;
+  border-color: rgba(150, 180, 200, 0.55);
+}
+.chart-drop-zone-new.is-hover {
+  border-color: rgba(76, 175, 200, 0.95);
+  background: rgba(76, 175, 200, 0.18);
+}
+.chart-drop-zone-new.is-hover .chart-drop-zone-label {
+  color: #fff;
+  background: rgba(76, 175, 200, 0.95);
+}
+.chart-sector-bar {
+  flex: 0 0 20px;
+  padding: 2px 0 0 0;
+}
+.chart-sector-bar-inner {
+  position: relative;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  cursor: grab;
+  user-select: none;
+  overflow: hidden;
+}
+.chart-sector-bar-inner:active { cursor: grabbing; }
+.chart-sector-bar-cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(207, 214, 232, 0.7);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.chart-sector-bar-cell:last-child { border-right: none; }
+.chart-sector-bar-cell:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #e6ecf3;
+}
+/* Sector currently containing the playhead. */
+.chart-sector-bar-cell.is-current {
+  background: rgba(255, 209, 102, 0.18);
+  color: #ffd166;
+}
+.chart-sector-bar-cell.is-current:hover {
+  background: rgba(255, 209, 102, 0.28);
+}
+/* Sector the viewport is zoomed-in to (chart x-axis matches this
+   sector's [t1Start, t1End]). Distinct accent from `is-current` so
+   the user can tell at a glance "I'm looking at sector X". */
+.chart-sector-bar-cell.is-zoomed {
+  background: rgba(76, 175, 200, 0.32);
+  color: #b8e8f3;
+  outline: 1px solid rgba(76, 175, 200, 0.6);
+  outline-offset: -1px;
+}
+.chart-sector-bar-cell.is-zoomed.is-current {
+  background: rgba(76, 175, 200, 0.42);
+  color: #ffe9a8;
+}
+.chart-sector-bar-num {
+  pointer-events: none;
+}
+
+/* Invisible resize handles — cursor-only affordance, matching the
+   layout-grid splitters elsewhere in the app (the user removed the
+   visual bars from those a few changes ago; same convention here). */
+.vr-charts-resize-w {
+  position: absolute;
+  left: -8px; top: 0; bottom: 0;
+  width: 16px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.vr-charts-resize-h {
+  /* In-flow row separator between the two tiles. Flex-shrink: 0
+     so dragging never collapses it. */
+  flex: 0 0 12px;
+  cursor: row-resize;
+}
+
+.vr-chart-tile {
+  background: rgba(9, 11, 16, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  min-height: 0;
+}
+/* Telemetry / delta `flex` values are written inline by VRChartsStack
+   from `topPct`. Defaults below act as a safety net for any future
+   caller that doesn't supply inline flex. */
+.vr-chart-tile-telemetry { flex: 3 1 0; }
+.vr-chart-tile-delta     { flex: 1 1 0; }
+.vr-chart-tile .panel-frame {
+  background: transparent;
+  border: none;
+}
+.vr-chart-tile .panel-frame-body {
+  background: transparent;
+}
+
+/* Bottom playback bar — translucent strip housing the control
+   buttons (left) and the unified VR timeline (right). The timeline
+   is responsible for BOTH playhead scrubbing AND chart-viewport
+   editing, so the strip is taller than a plain scrubber. */
+.vr-playback-bar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  height: 92px;
+  z-index: 20;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(9, 11, 16, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+.vr-pb-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.vr-pb-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6ecf3;
+  font-size: 13px;
+  cursor: pointer;
+}
+.vr-pb-btn:hover { background: rgba(255, 255, 255, 0.10); }
+.vr-pb-btn.is-rec {
+  background: rgba(244, 67, 54, 0.20);
+  border-color: rgba(244, 67, 54, 0.5);
+  color: #ffb4ab;
+}
+.vr-pb-speed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #9aa6b3;
+  font-size: 12px;
+}
+.vr-pb-speed select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: #e6ecf3;
+  padding: 4px 6px;
+}
+
+/* ── Unified timeline (playhead + viewport window) ─────────────────
+   Layout (top → bottom):
+     • Meta row: tiny `In · Now · Out · Lap` labels (12 px tall)
+     • Track:    full-width clickable strip (28 px tall)
+   Total height ~52 px inside the 92 px bar (with 12 px padding top/bot). */
+.vr-timeline-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+.vr-timeline-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: #9aa6b3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: none;
+  white-space: nowrap;
+}
+.vr-tl-meta-label { color: #5a6378; }
+.vr-tl-meta-val   { color: #e6ecf3; }
+.vr-tl-meta-sep   { color: #2a3140; padding: 0 4px; }
+.vr-tl-meta-fill  { flex: 1; }
+
+.vr-timeline-track {
+  position: relative;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  cursor: text;            /* hint: click anywhere to seek */
+  overflow: hidden;
+  user-select: none;
+}
+.vr-timeline-track:hover { background: rgba(255, 255, 255, 0.06); }
+
+.vr-timeline-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(76, 175, 200, 0.18);
+  border-left: 1px solid rgba(76, 175, 200, 0.7);
+  border-right: 1px solid rgba(76, 175, 200, 0.7);
+  cursor: grab;
+}
+.vr-timeline-window:active { cursor: grabbing; }
+.vr-timeline-window::before,
+.vr-timeline-window::after {
+  /* Faint top/bottom hairlines so the window reads as a bracket
+     even on busy chart backgrounds. */
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: rgba(76, 175, 200, 0.35);
+  pointer-events: none;
+}
+.vr-timeline-window::before { top: 0 }
+.vr-timeline-window::after  { bottom: 0 }
+
+.vr-timeline-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+}
+.vr-timeline-handle::before {
+  /* Visible vertical bar centred in the 12-px hit-target. */
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+  background: rgba(76, 175, 200, 0.85);
+  border-radius: 2px;
+}
+.vr-timeline-handle-l { left: 0;  transform: translateX(-50%); }
+.vr-timeline-handle-r { right: 0; transform: translateX(50%); }
+
+.vr-timeline-playhead {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 12px;
+  margin-left: -6px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+.vr-timeline-playhead::before {
+  /* Thin vertical line of the playhead, with a tiny chevron at the
+     top so it's recognisable as a drag target even at rest. */
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: #ff5577;
+  box-shadow: 0 0 4px rgba(255, 85, 119, 0.5);
+}
+.vr-timeline-playhead::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 10px;
+  height: 6px;
+  margin-left: -5px;
+  background: #ff5577;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Desktop chrome (post-HUD-removal)
+
+   The legacy left-side HUD has been retired in favour of a slim top bar,
+   a slim bottom bar, and an expandable sessions drawer. The `.app-shell`
+   used to be a 2-column grid (340 px sidebar + viewer); on desktop it's
+   now a single-column flex stack so the viewer fills the entire width.
+
+   Mobile uses a different root (`<MobileApp>`), so this only affects the
+   desktop branch — no responsive overrides needed here. The original
+   `.app-shell { grid-template-columns: 340px 1fr }` still applies to
+   any consumer that doesn't add the `.desktop-app-shell` class (none
+   left, but the rule is harmless and useful when re-introducing the
+   2-column layout for some other view).
+   ─────────────────────────────────────────────────────────────────── */
+
+.app-shell.desktop-app-shell {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+}
+
+.desktop-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 12px;
+  background: rgba(13, 16, 22, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  z-index: 10;
+}
+.desktop-topbar-spacer {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+.desktop-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 4px;
+  color: #cfd6e8;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+}
+.desktop-topbar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.20);
+}
+.desktop-topbar-btn.is-active {
+  background: rgba(76, 175, 200, 0.25);
+  border-color: rgba(76, 175, 200, 0.6);
+  color: #b8e8f3;
+}
+.desktop-topbar-btn-label { display: inline-block; }
+.desktop-topbar-btn-hint {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #5a6378;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 2px;
+  line-height: 13px;
+}
+.desktop-topbar-btn.is-active .desktop-topbar-btn-hint {
+  color: #b8e8f3;
+  background: rgba(76, 175, 200, 0.18);
+  border-color: rgba(76, 175, 200, 0.4);
+}
+
+/* Compact action toolbar inside the top bar — Play / Rec / Camera /
+   Follow / Compare / Corner / Speed. Each button is a small pill
+   with its current state on the left and a tiny shortcut-key chip
+   on the right, so the toolbar doubles as a visible cheat-sheet of
+   the keyboard bindings registered in useDesktopShortcuts. */
+.desktop-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+}
+.desktop-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 26px;
+  padding: 0 6px 0 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 4px;
+  color: #cfd6e8;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.desktop-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.desktop-toolbar-btn.is-active {
+  background: rgba(76, 175, 200, 0.22);
+  border-color: rgba(76, 175, 200, 0.55);
+  color: #b8e8f3;
+}
+.desktop-toolbar-btn-label {
+  display: inline-block;
+  font-weight: 600;
+}
+.desktop-toolbar-btn-hint {
+  margin-left: 8px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #5a6378;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 2px;
+  line-height: 14px;
+  min-width: 14px;
+  text-align: center;
+}
+.desktop-toolbar-btn.is-active .desktop-toolbar-btn-hint {
+  color: #b8e8f3;
+  background: rgba(76, 175, 200, 0.18);
+  border-color: rgba(76, 175, 200, 0.4);
+}
+
+.desktop-app-shell .viewer-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+/* ── Session drawer ───────────────────────────────────────────────────
+   Slide-in panel pinned to the left edge under the top bar. Replaces
+   the lap-list that used to live in the HUD. */
+.session-drawer-backdrop {
+  position: fixed;
+  inset: 38px 0 0 0;     /* below top bar, above bottom bar */
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 40;
+}
+.session-drawer {
+  position: fixed;
+  top: 38px;
+  bottom: 0;
+  left: 0;
+  width: 360px;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 16, 22, 0.98);
+  border-right: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.45);
+  color: #cfd6e8;
+}
+.session-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.session-drawer-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #e6ecf3;
+}
+.session-drawer-close {
+  background: transparent;
+  border: none;
+  color: #9aa6b3;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.session-drawer-close:hover { color: #fff; }
+
+.session-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.session-drawer-session + .session-drawer-session {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.session-drawer-session-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: #e6ecf3;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+}
+.session-drawer-session-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.session-drawer-chevron {
+  width: 12px;
+  color: #5a6378;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.session-drawer-session-name {
+  flex: 1;
+  font-weight: 600;
+}
+.session-drawer-session-meta {
+  font-size: 10px;
+  color: #5a6378;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.session-drawer-session-loaded {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #4cafc8;
+  background: rgba(76, 175, 200, 0.12);
+  border: 1px solid rgba(76, 175, 200, 0.35);
+  border-radius: 2px;
+  padding: 1px 5px;
+}
+
+.session-drawer-laps {
+  padding: 2px 0 8px;
+}
+.session-drawer-lap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 4px 32px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.session-drawer-lap:hover { background: rgba(255, 255, 255, 0.03); }
+.session-drawer-lap.is-disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.session-drawer-lap.is-disabled:hover { background: transparent; }
+.session-drawer-lap input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: #4cafc8;
+}
+.session-drawer-lap-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.session-drawer-lap-num {
+  min-width: 54px;
+  color: #cfd6e8;
+}
+.session-drawer-lap-time {
+  flex: 1;
+  color: #e6ecf3;
+}
+.session-drawer-lap-flag {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.session-drawer-lap-flag.flag-best {
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.12);
+  border: 1px solid rgba(255, 209, 102, 0.4);
+}
+.session-drawer-lap-flag.flag-red {
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.12);
+  border: 1px solid rgba(255, 138, 128, 0.4);
+}
+
+.session-drawer-footer {
+  padding: 6px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.session-drawer-hint {
+  font-size: 10px;
+  color: #5a6378;
+  font-style: italic;
+}
+
+/* ── Shortcuts help overlay ──────────────────────────────────────────── */
+.shortcuts-help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 60;
+}
+.shortcuts-help {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 16, 22, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.65);
+  color: #cfd6e8;
+}
+.shortcuts-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.shortcuts-help-close {
+  background: transparent;
+  border: none;
+  color: #9aa6b3;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.shortcuts-help-close:hover { color: #fff; }
+.shortcuts-help-body {
+  padding: 10px 14px;
+  overflow-y: auto;
+}
+.shortcuts-help-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.shortcuts-help-row:last-child { border-bottom: none; }
+.shortcuts-help-keys {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 100px;
+}
+.shortcuts-help-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e6ecf3;
+}
+.shortcuts-help-label {
+  flex: 1;
+  font-size: 12px;
+  color: #cfd6e8;
 }

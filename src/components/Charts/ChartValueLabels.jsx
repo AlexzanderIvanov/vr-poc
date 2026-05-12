@@ -1,57 +1,71 @@
 import React, { useEffect, useRef } from 'react'
 import { useStore } from '../../state/store'
 import { safe, isEchartsGridReady } from '../../utils/safe'
-// `findValueAt` is no longer re-exported from this `.jsx` file — vite's
-// Fast Refresh refuses to hot-reload `.jsx` modules that mix React
-// components with non-component exports. New imports should target
-// `utils/findValueAt` directly.
 
 /**
- * Live numeric readouts (and optional persistent channel name) pinned to
- * each chart row.
+ * Live value-readout chips pinned to each chart row.
  *
- * Per row we render up to two DOM nodes inside the chart wrapper:
+ * Two-tier compact layout — minimum information at rest, full
+ * information when a delta target is active:
  *
- *   - **Channel name** (`rowName`, `rowNameColor`): sits at the row's
- *     top-LEFT corner regardless of playhead position. Rendered once per
- *     provider change; stays put through scrolling/scrubbing.
- *   - **Live value column** (`getLines(t)`): top-RIGHT by default; when
- *     the playhead column comes within `FLIP_PAD` px of that corner, the
- *     column flips to the row's top-RIGHT-just-below-rowname-no — wait
- *     no, it flips to the LEFT side but a few px BELOW the row name so
- *     they don't stack on top of each other.
+ *   Steady state (delta mode OFF):
  *
- * Driven by raf reading `playheadRef.current` directly — no React
- * re-render, no `setOption`. DOM writes are skipped when the rendered
- * text didn't change (cached on `dataset.sig`), so an idle frame costs
- * ~0.05 ms.
+ *     ┌─────────┐
+ *     │ ● 254 % │
+ *     │ ● 250 % │
+ *     └─────────┘
  *
- * Provider contract:
+ *   Delta mode ON (target line set via the Δ header button):
+ *
+ *     ┌──────────────┐
+ *     │ ● 254     %  │      ← main row, value at PLAYHEAD (ref line)
+ *     │    198 −56   │      ← secondary, value at TARGET + delta
+ *     │ ● 250     %  │
+ *     │    195 −55   │
+ *     └──────────────┘
+ *
+ * The secondary row only appears while a delta target is set —
+ * hover no longer drives delta values. Sign on the delta is
+ * explicit (`+12` / `−56`) so the reader can tell whether the
+ * target sample is higher or lower than the playhead.
+ *
+ * Channel name has moved off the chip entirely — the rotated
+ * `yAxis.name` in the scale gutter on the left is where the user
+ * reads "this row is TPS". One source of truth, ~36 px width
+ * saved per chip.
+ *
+ * Reference source = the playhead (always — no more frozen-anchor
+ * variant; the playhead's own dashed cyan line is the "ref" the
+ * value chips report).
+ *
+ * Target source = `deltaRefPoint` if non-null. Set via the Δ button
+ * in the chart header bar and refined by clicking / dragging the
+ * orange target line that appears on every chart in the group.
+ *
+ * Provider contract (NB: param renamed from `cursorX` → `targetX`
+ * to reflect the new semantics; callers must read `deltaRefPoint`
+ * rather than `hoverPointRef`):
  *   {
  *     gridIndex,
- *     rowName?,            // optional persistent channel label, top-left
- *     rowNameColor?,
- *     getLines(t) → [{ text, color, opacity? }, ...] | null,
+ *     getLines(refX, targetX | null) → [{
+ *       value,         // formatted value at refX (always)
+ *       cursorValue?,  // formatted value at targetX (when target set)
+ *       delta?,        // signed delta string (when target set)
+ *       color,         // lap colour for the dot
+ *       unit?,         // suffix, dim
+ *       opacity?,
+ *     }, ...] | null,
  *   }
  *
- * Render this as a sibling of `<ReactECharts>` inside the same wrapper
- * that holds `containerRef`, alongside `<ChartPlayheadOverlay />`.
+ * Render this as a sibling of `<ReactECharts>` inside the same
+ * wrapper that holds `containerRef`.
  */
 
-const FLIP_PAD = 80   // px from the right edge at which we flip to the left
-const COL_WIDTH = 96  // readout column width in px
+const FLIP_PAD = 80
+const COL_WIDTH_MIN = 70
 
-/**
- * `xAxisFromTime` is the same converter used by `useEchartsTimeSync` for
- * the playhead overlay — see that hook's docstring. Defaults to identity
- * so time-axis charts don't need to pass anything. Provider `getLines`
- * receives the converted x-value (distance in position mode, time in
- * time mode) so its internal `findValueAt(data, x)` lookup matches the
- * data shape the chart is plotting.
- */
 export function ChartValueLabels({ containerRef, echartsRef, providers, xAxisFromTime = (t) => t }) {
-  const valueNodes = useRef([])
-  const nameNodes  = useRef([])
+  const boxRefs = useRef([])
 
   useEffect(() => {
     const container = containerRef.current
@@ -69,16 +83,26 @@ export function ChartValueLabels({ containerRef, echartsRef, providers, xAxisFro
       const dom = chart.getDom?.()
       if (!dom) { rafId = requestAnimationFrame(tick); return }
 
-      const phTime = useStore.getState().playheadRef.current
-      const phXValue = xAxisFromTime(phTime)
+      // Reference position is always the playhead (the cyan dashed
+      // line). Each chip's main row shows the value of the lap's
+      // sample at THIS x.
+      const ph = useStore.getState().playheadRef.current
+      const refXValue = xAxisFromTime(ph)
+
+      // Target position: the orange dashed line, present only while
+      // the user has armed delta mode. Drives the secondary "value
+      // + delta" sub-row in each chip. Hover no longer participates.
+      const drp = useStore.getState().deltaRefPoint
+      const cursorXValue = drp ? xAxisFromTime(drp.time) : null
+
       const dRect = dom.getBoundingClientRect()
       const cRect = container.getBoundingClientRect()
       const offX = dRect.left - cRect.left
       const offY = dRect.top - cRect.top
-      // Skip the call (and the "No coordinate system" warning it logs)
-      // until grid 0 has a renderable rect. See `isEchartsGridReady`.
-      const phX = isEchartsGridReady(chart, 0)
-        ? safe(() => chart.convertToPixel({ gridIndex: 0 }, [phXValue, 0])?.[0], null)
+      // Pixel column of the REF position — used to decide whether
+      // the chip is overlapping the playhead/anchor crosshair.
+      const refPx = isEchartsGridReady(chart, 0)
+        ? safe(() => chart.convertToPixel({ gridIndex: 0 }, [refXValue, 0])?.[0], null)
         : null
 
       providers.forEach((p, i) => {
@@ -86,71 +110,80 @@ export function ChartValueLabels({ containerRef, echartsRef, providers, xAxisFro
           () => chart.getModel().getComponent('grid', p.gridIndex).coordinateSystem.getRect(),
           null,
         )
-        const valNode = valueNodes.current[i]
-        const nameNode = nameNodes.current[i]
-        if (!grid) {
-          if (valNode) valNode.style.display = 'none'
-          if (nameNode) nameNode.style.display = 'none'
-          return
-        }
+        const box = boxRefs.current[i]
+        if (!box) return
+        if (!grid) { box.style.display = 'none'; return }
 
+        const lines = p.getLines(refXValue, cursorXValue)
+        if (!lines?.length) { box.style.display = 'none'; return }
+
+        // Cache-skip — only rebuild DOM when something the eye can
+        // see changes. cursorValue + delta are in the signature so
+        // toggling hover-on / hover-off rebuilds correctly.
+        const sig = lines
+          .map((l) => `${l.color}|${l.opacity ?? 1}|${l.value}|${l.cursorValue || ''}|${l.delta || ''}|${l.unit || ''}`)
+          .join('§')
+        if (box.dataset.sig !== sig) {
+          while (box.firstChild) box.removeChild(box.firstChild)
+          for (const l of lines) {
+            // Main row — dot + ref value + unit.
+            const main = document.createElement('div')
+            main.className = 'chart-value-row'
+            main.style.opacity = String(l.opacity ?? 1)
+            const dot = document.createElement('span')
+            dot.className = 'chart-value-dot'
+            dot.style.background = l.color
+            main.appendChild(dot)
+            const num = document.createElement('span')
+            num.className = 'chart-value-num'
+            num.textContent = l.value
+            main.appendChild(num)
+            if (l.unit) {
+              const u = document.createElement('span')
+              u.className = 'chart-value-unit'
+              u.textContent = l.unit
+              main.appendChild(u)
+            }
+            box.appendChild(main)
+
+            // Secondary row — cursor value + delta (hover only).
+            if (l.cursorValue != null && l.delta != null) {
+              const hr = document.createElement('div')
+              hr.className = 'chart-value-hover-row'
+              hr.style.opacity = String(l.opacity ?? 1)
+              const cv = document.createElement('span')
+              cv.className = 'chart-value-cursor-num'
+              cv.textContent = l.cursorValue
+              hr.appendChild(cv)
+              const dl = document.createElement('span')
+              dl.className = 'chart-value-delta'
+              dl.textContent = l.delta
+              hr.appendChild(dl)
+              box.appendChild(hr)
+            }
+          }
+          box.dataset.sig = sig
+        }
+        box.style.display = 'flex'
+
+        // Flip-left when the chip would overlap the ref-position
+        // crosshair (the chip's main value mirrors what the line
+        // points at, so leaving it under the crosshair is fine —
+        // we only flip when actually behind the right edge).
+        const boxW = Math.max(box.offsetWidth, COL_WIDTH_MIN)
         const rightEdge = grid.x + grid.width
-        const flipLeft = phX != null
-          && phX >= rightEdge - COL_WIDTH - FLIP_PAD
-          && phX <= rightEdge + 4
+        const flipLeft = refPx != null
+          && refPx >= rightEdge - boxW - FLIP_PAD
+          && refPx <= rightEdge + 4
 
-        // 1. Persistent channel name at top-left of the row (when provided).
-        if (nameNode) {
-          if (p.rowName) {
-            if (nameNode.textContent !== p.rowName) nameNode.textContent = p.rowName
-            nameNode.style.color = p.rowNameColor || '#cfd6e8'
-            nameNode.style.display = 'block'
-            nameNode.style.top = `${offY + grid.y + 2}px`
-            nameNode.style.left = `${offX + grid.x + 4}px`
-          } else {
-            nameNode.style.display = 'none'
-          }
+        if (flipLeft) {
+          box.style.left = `${offX + grid.x + 4}px`
+        } else {
+          box.style.left = `${offX + rightEdge - boxW - 4}px`
         }
-
-        // 2. Live value column. Providers receive the x-axis-converted
-        // value (distance in position mode, seconds in time mode) so their
-        // internal `findValueAt(data, x)` lookup matches the chart's
-        // current data shape.
-        if (valNode) {
-          const lines = p.getLines(phXValue)
-          if (!lines?.length) {
-            valNode.style.display = 'none'
-          } else {
-            const sig = lines.map((l) => `${l.color}|${l.opacity ?? 1}|${l.text}`).join('§')
-            if (valNode.dataset.sig !== sig) {
-              while (valNode.firstChild) valNode.removeChild(valNode.firstChild)
-              for (const l of lines) {
-                const row = document.createElement('div')
-                row.style.color = l.color
-                row.style.opacity = String(l.opacity ?? 1)
-                row.textContent = l.text
-                valNode.appendChild(row)
-              }
-              valNode.dataset.sig = sig
-            }
-            valNode.style.display = 'block'
-            valNode.style.width = `${COL_WIDTH}px`
-
-            if (flipLeft) {
-              // Stack below the row name so they don't collide. If there's
-              // no row name we still drop a few px so the value sits
-              // visually distinct from the playhead's own crosshair.
-              const yOffset = p.rowName ? 16 : 2
-              valNode.style.left = `${offX + grid.x + 4}px`
-              valNode.style.top = `${offY + grid.y + yOffset}px`
-              valNode.style.textAlign = 'left'
-            } else {
-              valNode.style.left = `${offX + rightEdge - COL_WIDTH - 4}px`
-              valNode.style.top = `${offY + grid.y + 2}px`
-              valNode.style.textAlign = 'right'
-            }
-          }
-        }
+        box.style.right = 'auto'
+        box.style.top = `${offY + grid.y + 2}px`
+        box.style.minWidth = `${COL_WIDTH_MIN}px`
       })
 
       rafId = requestAnimationFrame(tick)
@@ -159,39 +192,16 @@ export function ChartValueLabels({ containerRef, echartsRef, providers, xAxisFro
     return () => { alive = false; if (rafId) cancelAnimationFrame(rafId) }
   }, [containerRef, echartsRef, providers, xAxisFromTime])
 
-  const labelStyle = {
-    position: 'absolute',
-    display: 'none',
-    fontFamily: 'monospace',
-    fontSize: 11,
-    fontWeight: 700,
-    lineHeight: 1.2,
-    pointerEvents: 'none',
-    zIndex: 3,
-    textShadow: '0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7)',
-    whiteSpace: 'nowrap',
-  }
-
   return (
     <>
       {providers.map((_, i) => (
         <div
-          key={`name-${i}`}
-          ref={(el) => { nameNodes.current[i] = el }}
-          style={{ ...labelStyle, fontWeight: 700, letterSpacing: 0.5 }}
-        />
-      ))}
-      {providers.map((_, i) => (
-        <div
-          key={`val-${i}`}
-          ref={(el) => { valueNodes.current[i] = el }}
-          style={labelStyle}
+          key={`box-${i}`}
+          ref={(el) => { boxRefs.current[i] = el }}
+          className="chart-value-box"
+          style={{ display: 'none' }}
         />
       ))}
     </>
   )
 }
-
-// `findValueAt` is re-exported at the top of this file (now lives in
-// `utils/findValueAt.js`) so consumers like the chart panels keep their
-// existing import path while this `.jsx` only carries React components.

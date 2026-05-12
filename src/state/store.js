@@ -61,6 +61,11 @@ export const useStore = create((set, get) => ({
   // ---------- hot-path refs (NEVER replaced; always mutate `.current`) ----------
   playheadRef: { current: INITIAL_PLAYHEAD },
   sectorEndRef: { current: null },
+  // Mouse cursor position over a chart, in lap-time + ref-lap distance.
+  // Written by `ChartShell`'s ECharts `zr.mousemove` listener; read at
+  // raf rate by the chart header bar's live readout. `null` when no
+  // chart is hovered. Hot-path ref (mutate `.current`), never replaced.
+  hoverPointRef: { current: null },
 
   // ---------- playback ----------
   playing: false,
@@ -84,6 +89,33 @@ export const useStore = create((set, get) => ({
   lapTimeOffset: 0,
   sectorStartTime: null,
   selectedSector: null,
+
+  // ---------- delta-cursor reference point (chart header bar) ----------
+  // `{ time, distance } | null`. Set by the Δ button in the chart
+  // header bar; while non-null, the header shows Δt/Δd of the cursor
+  // relative to this anchor, and each chart's value chip shows a
+  // per-lap Δ value column alongside the live value.
+  deltaRefPoint: null,
+
+  // ---------- user-added telemetry chart rows ----------
+  // Channels the user has dragged from the right-side ChannelList
+  // onto the telemetry chart. Each entry is `{ id, target }`:
+  //
+  //   - `target: 'tps' | 'fbp' | 'gps_speed' | 'steer' | 'long_g' | …`
+  //     → OVERLAY on the existing grid whose primary `channelKey`
+  //       matches `target`. Plotted on a SECOND (right-side) y-axis
+  //       so the new channel's range doesn't crush the original
+  //       trace when scales differ wildly (e.g. RPM 0–8000 over
+  //       TPS 0–255).
+  //   - `target: null`
+  //     → NEW grid appended at the bottom of the chart.
+  //
+  // Order = insertion order; duplicates (same `id`, regardless of
+  // target) rejected by `addUserChannel` — a channel can live in
+  // exactly one place at a time. The seed set
+  // (`tps` / `fbp` / `gps_speed` / `steer` / G-grid) is baked into
+  // `SERIES_DEFS` and never appears here.
+  userAddedChannels: [],
 
   // ---------- view modes ----------
   cameraMode: defaultCameraMode(),
@@ -126,6 +158,22 @@ export const useStore = create((set, get) => ({
   setLapTimeOffset:   (v) => set((s) => ({ lapTimeOffset: apply(v, s.lapTimeOffset) })),
   setSectorStartTime: (v) => set((s) => ({ sectorStartTime: apply(v, s.sectorStartTime) })),
   setSelectedSector:  (v) => set((s) => ({ selectedSector: apply(v, s.selectedSector) })),
+
+  // ---------- actions: delta-cursor ----------
+  setDeltaRefPoint: (v) => set((s) => ({ deltaRefPoint: apply(v, s.deltaRefPoint) })),
+
+  // ---------- actions: user-added chart rows ----------
+  // Append-once: a no-op if the id is already plotted (overlay or new
+  // grid), so a double-drop doesn't stack duplicates. To move a
+  // channel between targets, call `removeUserChannel(id)` first.
+  addUserChannel: (id, target = null) => set((s) => (
+    s.userAddedChannels.some((x) => x.id === id)
+      ? {}
+      : { userAddedChannels: [...s.userAddedChannels, { id, target }] }
+  )),
+  removeUserChannel: (id) => set((s) => ({
+    userAddedChannels: s.userAddedChannels.filter((x) => x.id !== id),
+  })),
 
   // ---------- actions: presentation ----------
   // Write a per-lap colour override. Pass `null` / `undefined` to remove

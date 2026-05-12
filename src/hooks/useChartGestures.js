@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useStore } from '../state/store'
 import { safe } from '../utils/safe'
+import { arcLengthAtTime } from '../utils/arcLength'
 import {
   CHART_CLICK_PX,
   CHART_HANDLE_HIT_PX,
@@ -91,7 +92,8 @@ function attachChartGestures(chartInst, xAxisToTime) {
   }
 
   let active = false
-  let onHandle = false
+  let onHandle = false        // mousedown landed within HIT_PX of the playhead
+  let onTargetHandle = false  // …or within HIT_PX of the delta target line
   let zooming = false
   let panning = false
   let gridIdx = -1
@@ -135,6 +137,7 @@ function attachChartGestures(chartInst, xAxisToTime) {
   const reset = () => {
     active = false
     onHandle = false
+    onTargetHandle = false
     zooming = false
     panning = false
     panStart = null
@@ -162,11 +165,29 @@ function attachChartGestures(chartInst, xAxisToTime) {
 
     const wantsPan = !!e.event?.shiftKey
     const ph = useStore.getState().playhead
+    const drp = useStore.getState().deltaRefPoint
     const phX = safe(() => chartInst.convertToPixel({ gridIndex: g }, [ph, 0])?.[0], null)
-    const nearHandle = !wantsPan && phX != null && Math.abs(x - phX) <= CHART_HANDLE_HIT_PX
+    // `deltaRefPoint.time` is in seconds — `convertToPixel` expects the
+    // chart's x-axis value, which is identity for time-axis charts and
+    // arc length for distance-axis charts. We don't have the
+    // xAxisFromTime converter here, but the gesture handler is bound
+    // to one chart at a time and the playhead pixel resolution above
+    // implicitly relies on the chart's own coordinate system — so for
+    // hit-testing we use the same trick: convert ph via the chart's
+    // own xAxis interpretation. For now we hit-test target the same
+    // way (time mode is the most common; distance mode is approximate
+    // but close enough — both modes use the same delta target time).
+    const targetX = (drp != null)
+      ? safe(() => chartInst.convertToPixel({ gridIndex: g }, [drp.time, 0])?.[0], null)
+      : null
+    const nearHandle = !wantsPan && phX != null
+      && Math.abs(x - phX) <= CHART_HANDLE_HIT_PX
+    const nearTarget = !wantsPan && !nearHandle && targetX != null
+      && Math.abs(x - targetX) <= CHART_HANDLE_HIT_PX
 
     active = true
     onHandle = nearHandle
+    onTargetHandle = nearTarget
     zooming = false
     panning = wantsPan
     gridIdx = g
@@ -207,6 +228,20 @@ function attachChartGestures(chartInst, xAxisToTime) {
       return
     }
 
+    if (onTargetHandle) {
+      // Drag the delta TARGET line only. The playhead stays where it
+      // is; the delta values recompute relative to the new target.
+      const t = pixelToTime(gridIdx, curX)
+      if (t == null) return
+      const refLap = useStore.getState().laps.find((l) => !l.ghost)
+        ?? useStore.getState().laps[0]
+      const distance = refLap?.samples?.length
+        ? arcLengthAtTime(refLap.samples, t)
+        : 0
+      useStore.getState().setDeltaRefPoint({ time: t, distance })
+      return
+    }
+
     const dx = curX - downX
     if (!zooming && Math.abs(dx) <= CHART_CLICK_PX) return
     zooming = true
@@ -217,6 +252,7 @@ function attachChartGestures(chartInst, xAxisToTime) {
     if (!active) return
     const wasZooming = zooming
     const wasOnHandle = onHandle
+    const wasOnTarget = onTargetHandle
     const wasPanning = panning
     const upX = e.offsetX
     reset()
@@ -233,13 +269,39 @@ function attachChartGestures(chartInst, xAxisToTime) {
       return
     }
 
+    if (wasOnTarget) {
+      // Pure tap on the target handle without movement — no-op (the
+      // drag move handler already updated the position if there was
+      // any movement). Avoids accidentally resetting target on a
+      // simple click.
+      return
+    }
+
     if (!wasZooming) {
-      // Pure click → seek.
+      // Pure click → behavior depends on delta-mode state:
+      //   - No target set: click seeks the playhead (legacy behavior).
+      //   - Target set    : click moves the target to the clicked x,
+      //                     leaving the playhead alone. This matches
+      //                     the user model: ref = general position,
+      //                     target = delta-only refinement, both
+      //                     refineable independently. To return to
+      //                     plain seek behavior, dismiss the target
+      //                     via the Δ button in the header bar.
       if (Math.abs(upX - downX) > CHART_CLICK_PX) return
       const t = pixelToTime(gridIdx, downX)
       if (t == null) return
-      useStore.getState().setPlayhead(t)
-      useStore.getState().sectorEndRef.current = null
+      const drpNow = useStore.getState().deltaRefPoint
+      if (drpNow != null) {
+        const refLap = useStore.getState().laps.find((l) => !l.ghost)
+          ?? useStore.getState().laps[0]
+        const distance = refLap?.samples?.length
+          ? arcLengthAtTime(refLap.samples, t)
+          : 0
+        useStore.getState().setDeltaRefPoint({ time: t, distance })
+      } else {
+        useStore.getState().setPlayhead(t)
+        useStore.getState().sectorEndRef.current = null
+      }
       return
     }
 

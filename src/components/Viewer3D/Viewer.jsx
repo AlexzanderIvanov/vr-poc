@@ -18,6 +18,7 @@ import { CornerApexLayer } from './CornerApexLayer'
 import { CarEntity } from './CarEntity'
 import { CameraRig } from './CameraRig'
 import { PlaybackClock } from './PlaybackClock'
+import { CarDistanceLine } from './CarDistanceLine'
 import { useLapColor } from '../../hooks/useLapColor'
 
 /**
@@ -216,6 +217,12 @@ export function Viewer() {
           />
           ))
         })()}
+        {/* Position-compare distance indicator — a thin yellow line
+            from ref car to ghost car with a live "X.XX m" label at
+            the midpoint. Hidden in time-compare. Reads the cars'
+            world transforms from the same `targetMapRef` registry
+            CameraRig uses. */}
+        <CarDistanceLine targetMapRef={targetMapRef} />
         {focusTelemetry && (
           <ScopedTrackMarkers
             focusLap={focusLap}

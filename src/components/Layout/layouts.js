@@ -52,17 +52,17 @@ export const LAYOUT_PRESETS = {
     // the `default` preset if you want resizable panels.
     //
     // Telemetry takes the full right column at 80 % height because it has
-    // 4 internal rows; delta is 1 row at 20 %. Mismatch with the left
-    // column's 62/38 split is intentional — CSS Grid doesn't share row
-    // tracks across columns at different heights without a more complex
-    // template, and the visual is fine because the panels in each column
-    // are independent.
+    // 5 internal rows (TPS / BRAKE / SPEED / STEER / G); delta is 1 row
+    // at 20 %. Mismatch with the left column's 62/38 split is intentional
+    // — CSS Grid doesn't share row tracks across columns at different
+    // heights without a more complex template, and the visual is fine
+    // because the panels in each column are independent.
     tree: {
       kind: 'cssgrid',
       defaultColPct: 55,
       // Per-column row splits — left column biases toward the 3D viewer
       // (60 %) since the track map below works fine compact; right column
-      // biases harder toward telemetry (78 %) because it has 4 internal
+      // biases harder toward telemetry (78 %) because it has 5 internal
       // rows and the delta chart is one row.
       defaultLeftRowPct: 60,
       defaultRightRowPct: 78,

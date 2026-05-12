@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useStore } from '../state/store'
 import { safe, isEchartsGridReady } from '../utils/safe'
 import { useChartGestures } from './useChartGestures'
-import { PLAYHEAD_OVERLAY_CLASS } from '../constants'
+import {
+  PLAYHEAD_OVERLAY_CLASS,
+  DELTA_TARGET_OVERLAY_CLASS,
+  DELTA_WINDOW_OVERLAY_CLASS,
+} from '../constants'
 
 /**
  * Centralised wiring between an ECharts instance and the analysis-frame state.
@@ -59,27 +63,45 @@ import { PLAYHEAD_OVERLAY_CLASS } from '../constants'
 export function useEchartsTimeSync(
   echartsRef,
   containerRef,
-  { tMax, xAxisFromTime = (t) => t, xAxisToTime = (x) => x },
+  { tMax, xAxisFromTime = (t) => t, xAxisToTime = (x) => x, optionEpoch },
 ) {
   const viewport = useStore((s) => s.viewport)
   const setViewport = useStore((s) => s.setViewport)
   const ignoreNextRef = useRef(false)
 
-  // viewport → dataZoom (only fires when viewport actually changes — not in
-  // the playback hot path). `viewport` is always seconds; convert through
-  // `xAxisFromTime` first so distance-axis charts get the right fractional
-  // window (the relationship between seconds and metres is non-linear,
-  // so simple `seconds / tMax(metres)` would warp the dataZoom range).
-  useEffect(() => {
+  // Dispatch the current store viewport onto the chart's dataZoom. The
+  // `ignoreNext` flag suppresses the inevitable `dataZoom` event echo
+  // so we don't loop back through `onDataZoom → setViewport`.
+  const applyViewport = (tStart, tEnd) => {
     const chart = echartsRef.current?.getEchartsInstance?.()
     if (!chart || tMax <= 0) return
-    const xStart = xAxisFromTime(viewport.tStart)
-    const xEnd   = xAxisFromTime(viewport.tEnd)
-    const startPct = (xStart / tMax) * 100
-    const endPct   = (xEnd   / tMax) * 100
+    const startPct = (xAxisFromTime(tStart) / tMax) * 100
+    const endPct   = (xAxisFromTime(tEnd)   / tMax) * 100
+    if (!Number.isFinite(startPct) || !Number.isFinite(endPct)) return
     ignoreNextRef.current = true
     safe(() => chart.dispatchAction({ type: 'dataZoom', start: startPct, end: endPct }))
+  }
+
+  // viewport → dataZoom (fires only when viewport actually changes —
+  // not in the playback hot path). `viewport` is always seconds;
+  // converted through `xAxisFromTime` so distance-axis charts get the
+  // right fractional window.
+  useEffect(() => {
+    applyViewport(viewport.tStart, viewport.tEnd)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewport.tStart, viewport.tEnd, tMax, echartsRef, xAxisFromTime])
+
+  // option-swap → re-assert viewport. Necessary because with
+  // `notMerge: true` ECharts can reset the dataZoom widget when the
+  // surrounding components shrink (e.g. removing an overlay axis),
+  // even though we seed `start/end` in the option. Reads viewport
+  // non-reactively — this effect only fires on actual option changes.
+  useEffect(() => {
+    if (optionEpoch == null) return
+    const vp = useStore.getState().viewport
+    applyViewport(vp.tStart, vp.tEnd)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionEpoch, tMax, xAxisFromTime, echartsRef])
 
   // Playhead overlay — DOM div, NOT an ECharts markLine.
   //
@@ -113,6 +135,13 @@ export function useEchartsTimeSync(
     let rafId = 0
     let lastPx = -1
 
+    // Delta overlays — second vertical line (the "target") plus the
+    // band rectangle spanning [playhead .. target]. Both nodes are
+    // optional (older charts that don't render `<ChartDeltaOverlays/>`
+    // simply skip the work). Cached `lastPx` values avoid redundant
+    // style writes when the value hasn't moved by ≥0.5 px.
+    let lastTargetPx = -1
+    let lastWindow = { l: -1, w: -1 }
     const tick = () => {
       if (!alive) return
       const chart = echartsRef.current?.getEchartsInstance?.()
@@ -127,6 +156,7 @@ export function useEchartsTimeSync(
         return
       }
       const phTime = useStore.getState().playheadRef.current
+      const drp    = useStore.getState().deltaRefPoint
       // `xAxisFromTime` maps the playhead (always in seconds) onto the
       // chart's x-axis. Identity for time-axis charts, arc-length lookup
       // for distance-axis charts.
@@ -136,23 +166,69 @@ export function useEchartsTimeSync(
       // but its rect isn't ready yet). `safe()` catches the eventual
       // throw, but ECharts logs a warning BEFORE throwing — this guard
       // skips the call entirely until the grid is renderable.
-      const phX = isEchartsGridReady(chart, 0)
+      const ready = isEchartsGridReady(chart, 0)
+      const phX = ready
         ? safe(() => chart.convertToPixel({ gridIndex: 0 }, [phX_data, 0])?.[0], null)
         : null
+      const targetX = (ready && drp)
+        ? safe(() => chart.convertToPixel({ gridIndex: 0 }, [xAxisFromTime(drp.time), 0])?.[0], null)
+        : null
+      const dRect = dom.getBoundingClientRect()
+      const cRect = container.getBoundingClientRect()
+      const offX = dRect.left - cRect.left
+      const offY = dRect.top - cRect.top
+      const innerH = dRect.height - 24
       if (phX != null && isFinite(phX) && phX >= 0) {
-        const dRect = dom.getBoundingClientRect()
-        const cRect = container.getBoundingClientRect()
-        const finalX = (dRect.left - cRect.left) + phX
+        const finalX = offX + phX
         if (Math.abs(finalX - lastPx) >= 0.5) {
           overlay.style.left = `${finalX}px`
-          overlay.style.top = `${dRect.top - cRect.top}px`
-          overlay.style.height = `${dRect.height - 24}px`
+          overlay.style.top = `${offY}px`
+          overlay.style.height = `${innerH}px`
           overlay.style.display = 'block'
           lastPx = finalX
         }
       } else if (lastPx !== -1) {
         overlay.style.display = 'none'
         lastPx = -1
+      }
+
+      // Delta target line + window. Hide both when no target set.
+      const tEl = container.querySelector(`.${DELTA_TARGET_OVERLAY_CLASS}`)
+      const wEl = container.querySelector(`.${DELTA_WINDOW_OVERLAY_CLASS}`)
+      if (!tEl || !wEl) {
+        rafId = requestAnimationFrame(tick)
+        return
+      }
+      if (targetX != null && isFinite(targetX) && targetX >= 0 && phX != null) {
+        const tFinalX = offX + targetX
+        if (Math.abs(tFinalX - lastTargetPx) >= 0.5) {
+          tEl.style.left = `${tFinalX}px`
+          tEl.style.top = `${offY}px`
+          tEl.style.height = `${innerH}px`
+          tEl.style.display = 'block'
+          lastTargetPx = tFinalX
+        }
+        // Window rect between the two vertical lines.
+        const phFinalX = offX + phX
+        const left = Math.min(phFinalX, tFinalX)
+        const width = Math.abs(tFinalX - phFinalX)
+        if (Math.abs(left - lastWindow.l) >= 0.5 || Math.abs(width - lastWindow.w) >= 0.5) {
+          wEl.style.left = `${left}px`
+          wEl.style.width = `${width}px`
+          wEl.style.top = `${offY}px`
+          wEl.style.height = `${innerH}px`
+          wEl.style.display = width > 1 ? 'block' : 'none'
+          lastWindow = { l: left, w: width }
+        }
+      } else {
+        if (lastTargetPx !== -1) {
+          tEl.style.display = 'none'
+          lastTargetPx = -1
+        }
+        if (lastWindow.l !== -1 || lastWindow.w !== -1) {
+          wEl.style.display = 'none'
+          lastWindow = { l: -1, w: -1 }
+        }
       }
       rafId = requestAnimationFrame(tick)
     }

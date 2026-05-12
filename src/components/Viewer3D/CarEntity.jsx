@@ -295,7 +295,16 @@ export const CarEntity = React.memo(function CarEntity({ carUrl, lap, lapTimeOff
           </div>
         </Html>
       )}
-      {visible && showCarHuds && showDeltaBadge && (
+      {/* Delta badge — shown above the REF car when a ghost lap is
+          present. Number + green/red colouring tells the user at a
+          glance whether the ref is ahead (green, `-X.XXXs`) or behind
+          (red, `+X.XXXs`) the ghost at the current playhead. Used
+          to be gated by `showCarHuds` (which is hardcoded `false` in
+          Viewer.jsx), so the badge never appeared. Decoupling so it
+          shows on both desktop and mobile whenever a comparison
+          makes sense. The TPS/BRK HUD bars above the cars stay
+          behind their separate `showCarHuds` gate. */}
+      {visible && showDeltaBadge && (
         <Html position={[0, isRefLap ? 2.6 : 3.1, 0]} center distanceFactor={16} style={{ pointerEvents: 'none' }}>
           <div ref={deltaBadgeRef} className="car-delta-badge" style={{ display: 'none' }} />
         </Html>

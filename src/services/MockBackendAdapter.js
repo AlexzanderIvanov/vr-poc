@@ -28,6 +28,7 @@ const ROUTE_TO_MANIFEST = {
   '/slow-and-slower': '/assets/laps/manifest_slow_and_slower.json',
   '/slow-vs-master':  '/assets/laps/manifest_slow_vs_master.json',
   '/video':           '/assets/laps/manifest_video.json',
+  '/vr':              '/assets/laps/manifest.json',
 }
 
 const SIMULATED_LATENCY_MS = 25

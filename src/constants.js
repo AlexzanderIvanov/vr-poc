@@ -150,6 +150,15 @@ export const CHART_MIN_ZOOM_DRAG_S = 0.05
  * its `style.left`. Kept here so renaming touches one place.
  */
 export const PLAYHEAD_OVERLAY_CLASS = 'chart-playhead-overlay'
+/** Class name for the delta-target overlay div (second vertical line
+ *  that appears only while delta mode is active). Mirrors the playhead
+ *  pattern — DOM div positioned via rAF rather than an ECharts markLine
+ *  so we stay off the chart's setOption hot path. */
+export const DELTA_TARGET_OVERLAY_CLASS = 'chart-delta-target-overlay'
+/** Class name for the lighter band drawn BETWEEN the playhead (ref)
+ *  and the delta target. Visualises the "delta window" so the user can
+ *  see at a glance how wide the comparison span is. */
+export const DELTA_WINDOW_OVERLAY_CLASS = 'chart-delta-window-overlay'
 
 
 // ─── Recording (MediaRecorder, canvas.captureStream) ─────────────────────

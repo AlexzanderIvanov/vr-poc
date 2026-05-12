@@ -4,6 +4,9 @@ import { useAppInit } from './hooks/useAppInit'
 import { useIsMobile } from './hooks/useIsMobile'
 import { DesktopApp } from './components/DesktopApp/DesktopApp'
 import { MobileApp } from './components/MobileApp/MobileApp'
+import { VRApp } from './components/VRApp/VRApp'
+
+const isVRRoute = () => typeof window !== 'undefined' && window.location?.pathname === '/vr'
 
 /**
  * Platform router.
@@ -36,6 +39,10 @@ export default function App() {
       </div>
     )
   }
+
+  // Experimental VR layout — full-screen 3D + transparent overlays.
+  // Pinned to desktop (mobile gets MobileApp regardless of pathname).
+  if (!isMobile && isVRRoute()) return <VRApp />
 
   return isMobile ? <MobileApp /> : <DesktopApp />
 }

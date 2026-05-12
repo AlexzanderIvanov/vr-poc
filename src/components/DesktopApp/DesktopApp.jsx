@@ -1,237 +1,212 @@
-import React, { useCallback, useMemo, useState } from 'react'
-import { useStore } from '../../state/store'
+import React, { useState } from 'react'
 import { useCornerAnalysisData, useRecorder } from '../../hooks/useAppInit'
-import { useLapColor } from '../../hooks/useLapColor'
+import { useDesktopShortcuts } from '../../hooks/useDesktopShortcuts'
+import { useStore } from '../../state/store'
 import { CornerAnalysisPanel } from '../Corners/CornerAnalysisPanel'
-import { LapSyncControls } from '../HUD/LapSyncControls'
 import { LoadingOverlay } from '../HUD/LoadingOverlay'
-import { TimeScrubber } from '../HUD/TimeScrubber'
 import { LayoutGrid, LayoutPresetBar } from '../Layout/LayoutGrid'
 import { PersistentViewer3D } from '../Viewer3D/PersistentViewer3D'
 import { Viewer3DErrorBoundary } from '../Viewer3D/Viewer3DErrorBoundary'
+import { SessionDrawer } from '../Sessions/SessionDrawer'
+import { ShortcutsHelp } from '../Shortcuts/ShortcutsHelp'
 
-const MODE_LABELS = {
-  standard: 'Standard',
-  compare_projected_um981: 'Projected',
-  compare_projected_raw: 'Raw Projected',
-}
-const DEVICE_COLORS = { um982: '#4dd0e1', um981: '#9b7bff', um981raw: '#ffd166' }
-
-function groupLapsBySession(laps) {
-  const groups = new Map()
-  for (const lap of laps) {
-    const sid = lap.session_id ?? 'unknown'
-    if (!groups.has(sid)) groups.set(sid, [])
-    groups.get(sid).push(lap)
-  }
-  return groups
-}
+const CAMERA_MODES = ['chase', 'hood', 'side', 'top', 'free']
+const CAMERA_LABELS = { chase: 'Chase', hood: 'Hood', side: 'Side', top: 'Top', free: 'Free' }
+const SPEED_OPTIONS = [0.25, 0.5, 1, 2]
 
 /**
- * One row in the lap-list sidebar. Pulled into its own component so we
- * can subscribe to the lap's presentation colour via `useLapColor`
- * (hooks can't run in a loop in the parent). When a future
- * `<LapColorPicker>` writes `setLapColor(id, hex)`, this row's swatch
- * re-renders along with every other surface that reads through the
- * same hook.
+ * Compact action button used in the desktop top bar.
+ *
+ * Visible button + the keyboard shortcut hint right next to it, so
+ * the user can see what's available without opening the help
+ * overlay. Clicking is functionally identical to pressing the
+ * shortcut. `is-active` puts the button into the accent state for
+ * toggle-like actions (recording, compare-position, corner mode).
  */
-function LapListRow({ lap, visibility, syncOffset, onToggle, onSyncChange }) {
-  const lapColor = useLapColor(lap.id)
+function ToolbarBtn({ label, hint, active, onClick, title, color }) {
   return (
-    <div className="lap-entry">
-      <label className="lap-row">
-        <input
-          type="checkbox"
-          checked={visibility[lap.id] ?? true}
-          onChange={() => onToggle(lap.id)}
-        />
-        <span className="lap-swatch" style={{ background: lapColor }} />
-        <span className="lap-info">
-          <span className="lap-name">{lap.label}</span>
-          <span className="lap-tags">
-            <span
-              className="device-badge"
-              style={{ borderColor: DEVICE_COLORS[lap.device_id] || '#888' }}
-            >{(lap.device_id || '?').toUpperCase()}</span>
-            <span className="mode-badge">{MODE_LABELS[lap.mode] || lap.mode || '?'}</span>
-          </span>
-        </span>
-      </label>
-      {syncOffset && (
-        <LapSyncControls lap={lap} syncOffset={syncOffset} onSyncChange={onSyncChange} />
-      )}
-    </div>
+    <button
+      type="button"
+      className={`desktop-toolbar-btn ${active ? 'is-active' : ''}`}
+      onClick={onClick}
+      title={title}
+      style={color ? { borderColor: color } : undefined}
+    >
+      <span className="desktop-toolbar-btn-label">{label}</span>
+      <span className="desktop-toolbar-btn-hint">{hint}</span>
+    </button>
   )
-}
-
-function getRefWarnings(laps, visibility) {
-  const warnings = []
-  for (const lap of laps) {
-    if (!lap.reference_lap_id) continue
-    if ((visibility[lap.id]) && visibility[lap.reference_lap_id] === false) {
-      warnings.push({ lapId: lap.id, message: `Reference lap hidden for "${lap.label}"` })
-    }
-  }
-  return warnings
 }
 
 /**
  * Desktop presentation root.
  *
- * Layout responsibilities only — all data loading, playback wiring, and
- * cross-platform keybindings live in `useAppInit()` (called by `<App>`).
- * Reads everything else straight from the Zustand store.
+ * No left HUD any more. Everything that used to live there has moved
+ * to one of three surfaces:
  *
- * Mobile UA users see `<MobileApp>` instead — the platform router in
- * `App.jsx` picks based on `useIsMobile()`.
+ *   • Top bar — a compact action toolbar (Play, Rec, Camera, Follow,
+ *     Compare, Corner, Speed) where every button is also a visual
+ *     shortcut cheat-sheet: each shows its keyboard hint next to the
+ *     label so the user can see what's available without opening the
+ *     help overlay. Clicking a button does the same thing as pressing
+ *     its shortcut. Layout-preset chips and the sessions / help
+ *     buttons sit on either side.
+ *   • Keyboard — `useDesktopShortcuts` registers every binding listed
+ *     on those buttons (plus a few more like `S` for the drawer and
+ *     `?` for the help overlay). Both inputs converge on the same
+ *     store actions.
+ *   • Bottom bar — slim time scrubber strip so playback position
+ *     stays visible and draggable.
+ *   • Session drawer — sessions / lap browser slides out from the
+ *     left, fed by mocked data for now (real backend wiring later).
+ *
+ * Layout responsibilities only — data loading, playback wiring and
+ * cross-platform space-to-toggle live in `useAppInit()` (called by
+ * `<App>`).
  */
 export function DesktopApp() {
-  // ---------- store reads ----------
-  const laps                = useStore((s) => s.laps)
-  const playing             = useStore((s) => s.playing)
-  const speed               = useStore((s) => s.speed)
-  const focusLapId          = useStore((s) => s.focusLapId)
-  const cameraMode          = useStore((s) => s.cameraMode)
-  const visibility          = useStore((s) => s.visibility)
-  const syncOffsets         = useStore((s) => s.syncOffsets)
-  const compareMode         = useStore((s) => s.compareMode)
-  const cornerAnalysisMode  = useStore((s) => s.cornerAnalysisMode)
+  const laps               = useStore((s) => s.laps)
+  const playing            = useStore((s) => s.playing)
+  const speed              = useStore((s) => s.speed)
+  const cameraMode         = useStore((s) => s.cameraMode)
+  const focusLapId         = useStore((s) => s.focusLapId)
+  const visibility         = useStore((s) => s.visibility)
+  const compareMode        = useStore((s) => s.compareMode)
+  const cornerAnalysisMode = useStore((s) => s.cornerAnalysisMode)
 
-  // ---------- store actions ----------
-  const setPlaying          = useStore((s) => s.setPlaying)
-  const setSpeed            = useStore((s) => s.setSpeed)
-  const setCameraMode       = useStore((s) => s.setCameraMode)
-  const setFocusLapId       = useStore((s) => s.setFocusLapId)
-  const setVisibility       = useStore((s) => s.setVisibility)
-  const setSyncOffsets      = useStore((s) => s.setSyncOffsets)
-  const setCompareMode      = useStore((s) => s.setCompareMode)
+  const setPlaying            = useStore((s) => s.setPlaying)
+  const setSpeed              = useStore((s) => s.setSpeed)
+  const setCameraMode         = useStore((s) => s.setCameraMode)
+  const setFocusLapId         = useStore((s) => s.setFocusLapId)
+  const setCompareMode        = useStore((s) => s.setCompareMode)
   const setCornerAnalysisMode = useStore((s) => s.setCornerAnalysisMode)
 
-  // ---------- shared data pipes ----------
-  const cornerData          = useCornerAnalysisData()
   const { recording, toggle: toggleRecording } = useRecorder()
+  const cornerData = useCornerAnalysisData()
 
-  // ---------- UI-local ----------
-  const [mobileDrawer, setMobileDrawer] = useState(null) // null | 'menu' | 'map' | 'data'
-  const [showCarHuds, setShowCarHuds]   = useState(true)
+  const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
-  // Cycle helpers for the mobile-toolbar shortcuts left visible on small
-  // tablet widths — desktop layout uses the dropdowns below.
-  const CAMERA_MODES = ['chase', 'hood', 'side', 'top', 'free']
-  const CAMERA_LABELS = { chase: 'CHS', hood: 'HOOD', side: 'SIDE', top: 'TOP', free: 'FREE' }
-  const SPEED_OPTIONS = [0.25, 0.5, 1, 2]
+  useDesktopShortcuts({
+    onToggleSessions: () => setSessionsOpen((v) => !v),
+    onToggleHelp:     () => setHelpOpen((v) => !v),
+    onCloseHelp:      () => setHelpOpen(false),
+    toggleRecording,
+  })
+
+  // Cycle helpers — same logic the shortcut listener uses, kept
+  // here so the visible buttons stay in lock-step.
   const cycleCamera = () => {
     const i = CAMERA_MODES.indexOf(cameraMode)
     setCameraMode(CAMERA_MODES[(i + 1) % CAMERA_MODES.length])
   }
-  const cycleSpeed = () => {
-    const i = SPEED_OPTIONS.indexOf(speed)
-    setSpeed(SPEED_OPTIONS[(i + 1) % SPEED_OPTIONS.length])
+  const cycleFocus = () => {
+    const visibleIds = laps.filter((l) => visibility[l.id] !== false).map((l) => l.id)
+    if (!visibleIds.length) return
+    const i = visibleIds.indexOf(focusLapId)
+    setFocusLapId(visibleIds[(i + 1) % visibleIds.length])
   }
-
-  const toggleLap = (lapId) => setVisibility((s) => ({ ...s, [lapId]: !s[lapId] }))
-  const handleSyncChange = useCallback(
-    (lapId, offset) => setSyncOffsets((prev) => ({ ...prev, [lapId]: offset })),
-    [setSyncOffsets],
-  )
-
-  const sessionGroups = useMemo(() => groupLapsBySession(laps), [laps])
-  const warnings = useMemo(() => getRefWarnings(laps, visibility), [laps, visibility])
+  const focusLap = laps.find((l) => l.id === focusLapId)
+  const focusLapLabel = focusLap?.label
+    ? focusLap.label.length > 18
+      ? focusLap.label.slice(0, 18) + '…'
+      : focusLap.label
+    : '—'
 
   return (
-    <div className={`app-shell ${mobileDrawer ? `drawer-${mobileDrawer}-open` : ''}`}>
-      {/* Mobile/tablet toolbar — visible on small viewports via CSS rules. */}
-      <div className="mobile-toolbar">
-        <button className="mtb-btn" aria-label="Menu" onClick={() => setMobileDrawer(d => d === 'menu' ? null : 'menu')}>{'☰'}</button>
-        <button className="mtb-btn" aria-label={playing ? 'Pause' : 'Play'} onClick={() => setPlaying(v => !v)}>{playing ? '⏸' : '▶'}</button>
-        <button className="mtb-btn mtb-btn-text" aria-label={`Speed ${speed}x — tap to cycle`} onClick={cycleSpeed}>{speed}x</button>
-        <button className="mtb-btn mtb-btn-text" aria-label={`Camera ${cameraMode} — tap to cycle`} onClick={cycleCamera}>{CAMERA_LABELS[cameraMode] || cameraMode.toUpperCase().slice(0, 4)}</button>
-        <button className="mtb-btn mtb-btn-text" aria-label={`Compare by ${compareMode} — tap to toggle`} onClick={() => setCompareMode(m => m === 'time' ? 'position' : 'time')}>{compareMode === 'time' ? 'T' : 'P'}</button>
-        <button className={`mtb-btn mtb-btn-text ${cornerAnalysisMode ? 'mtb-btn-active' : ''}`} aria-label="Corner analysis" onClick={() => setCornerAnalysisMode(v => !v)}>{'◎'}</button>
-        <button className="mtb-btn" aria-label="Map" onClick={() => setMobileDrawer(d => d === 'map' ? null : 'map')}>{'🗺'}</button>
-        <button className="mtb-btn" aria-label="Charts" onClick={() => setMobileDrawer(d => d === 'data' ? null : 'data')}>{'📈'}</button>
-        <button className={`mtb-btn ${showCarHuds ? 'mtb-btn-active' : ''}`} aria-label="Toggle car data" onClick={() => setShowCarHuds(v => !v)}>{'📊'}</button>
+    <div className="app-shell desktop-app-shell">
+      <div className="desktop-topbar">
+        {/* Left: drawer toggle. */}
+        <button
+          type="button"
+          className={`desktop-topbar-btn ${sessionsOpen ? 'is-active' : ''}`}
+          onClick={() => setSessionsOpen((v) => !v)}
+          title="Sessions browser (S)"
+        >
+          <span className="desktop-topbar-btn-label">☰ Sessions</span>
+          <span className="desktop-topbar-btn-hint">S</span>
+        </button>
+
+        {/* Compact action toolbar — buttons + visible shortcut hints. */}
+        <div className="desktop-toolbar">
+          <ToolbarBtn
+            label={playing ? '⏸ Pause' : '▶ Play'}
+            hint="Space"
+            active={playing}
+            onClick={() => setPlaying((v) => !v)}
+            title="Play / pause"
+          />
+          <ToolbarBtn
+            label={recording ? '■ Stop Rec' : '● Rec'}
+            hint="R"
+            active={recording}
+            onClick={toggleRecording}
+            title="Toggle recording"
+          />
+          <ToolbarBtn
+            label={`📷 ${CAMERA_LABELS[cameraMode] ?? cameraMode}`}
+            hint="C"
+            onClick={cycleCamera}
+            title={`Cycle camera mode (now: ${CAMERA_LABELS[cameraMode] ?? cameraMode})`}
+          />
+          <ToolbarBtn
+            label={`⊙ ${focusLapLabel}`}
+            hint="F"
+            onClick={cycleFocus}
+            title="Cycle focus lap (camera follows)"
+          />
+          <ToolbarBtn
+            label={`⇄ ${compareMode === 'time' ? 'Time' : 'Position'}`}
+            hint="T"
+            active={compareMode === 'position'}
+            onClick={() => setCompareMode((m) => (m === 'time' ? 'position' : 'time'))}
+            title="Toggle compare mode (time / position)"
+          />
+          <ToolbarBtn
+            label={`◎ Corner`}
+            hint="N"
+            active={cornerAnalysisMode}
+            onClick={() => setCornerAnalysisMode((v) => !v)}
+            title="Toggle corner-analysis overlay"
+          />
+          <ToolbarBtn
+            label={`${speed}×`}
+            hint="1-4"
+            onClick={() => {
+              const i = SPEED_OPTIONS.indexOf(speed)
+              setSpeed(SPEED_OPTIONS[(i + 1) % SPEED_OPTIONS.length])
+            }}
+            title="Playback speed (1=0.25× · 2=0.5× · 3=1× · 4=2×)"
+          />
+        </div>
+
+        {/* Centre: layout-preset chips. */}
+        <div className="desktop-topbar-spacer">
+          <LayoutPresetBar />
+        </div>
+
+        {/* Right: help. */}
+        <button
+          type="button"
+          className={`desktop-topbar-btn ${helpOpen ? 'is-active' : ''}`}
+          onClick={() => setHelpOpen((v) => !v)}
+          title="Keyboard shortcuts (? or H)"
+        >
+          <span className="desktop-topbar-btn-label">?</span>
+        </button>
       </div>
 
-      {/* Drawer backdrop — closes the active drawer on tap. */}
-      {mobileDrawer && <div className="mobile-drawer-backdrop" onClick={() => setMobileDrawer(null)} />}
-
-      <div className={`hud ${mobileDrawer === 'menu' ? 'hud-open' : ''}`}>
-        <div className="hud-section">
-          <h1>Virtualization Web POC</h1>
-          <p>Track + M3 + lap playback with ghost comparisons and camera presets.</p>
-        </div>
-
-        <LayoutPresetBar />
-
-        <div className="hud-section controls-grid">
-          <div className="controls-row">
-            <button onClick={() => setPlaying((v) => !v)}>{playing ? 'Pause' : 'Play'}</button>
-            <button className={`rec-btn ${recording ? 'rec-btn-active' : ''}`} onClick={toggleRecording}>
-              {recording ? '■ Stop Rec' : '● Rec'}
-            </button>
-          </div>
-          <label>Speed<select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-            <option value={0.25}>0.25x</option><option value={0.5}>0.5x</option><option value={1}>1x</option><option value={2}>2x</option>
-          </select></label>
-          <label>Camera<select value={cameraMode} onChange={(e) => setCameraMode(e.target.value)}>
-            <option value="chase">Chase</option><option value="hood">Hood</option><option value="side">Side</option><option value="top">Top</option><option value="free">Free</option>
-          </select></label>
-          <label>Follow<select value={focusLapId ?? ''} onChange={(e) => setFocusLapId(e.target.value)}>
-            {laps.map((lap) => <option key={lap.id} value={lap.id}>{lap.label}</option>)}
-          </select></label>
-          <label>Compare<select value={compareMode} onChange={(e) => setCompareMode(e.target.value)}>
-            <option value="time">Time</option>
-            <option value="position">Position</option>
-          </select></label>
-          <button
-            className={cornerAnalysisMode ? 'active-toggle' : ''}
-            onClick={() => setCornerAnalysisMode(v => !v)}
-            aria-pressed={cornerAnalysisMode}
-            title="Mark brake / throttle key-points on track + per-corner meter deltas"
-          >
-            {cornerAnalysisMode ? '◉' : '◎'} Corner analysis
-          </button>
-        </div>
-
-        <TimeScrubber mode="desktop" />
-
-        {warnings.length > 0 && (
-          <div className="hud-section warnings">
-            {warnings.map((w) => <div key={w.lapId} className="warning-row">{w.message}</div>)}
-          </div>
-        )}
-
-        <div className="hud-section lap-list">
-          {Array.from(sessionGroups.entries()).map(([sessionId, sessionLaps]) => (
-            <div key={sessionId} className="session-group">
-              <div className="session-header">Session {sessionId}</div>
-              {sessionLaps.map((lap) => (
-                <LapListRow
-                  key={lap.id}
-                  lap={lap}
-                  visibility={visibility}
-                  syncOffset={syncOffsets[lap.id]}
-                  onToggle={toggleLap}
-                  onSyncChange={handleSyncChange}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+      <SessionDrawer open={sessionsOpen} onClose={() => setSessionsOpen(false)} />
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <div className="viewer-shell">
         <LayoutGrid />
         <LoadingOverlay />
-        {cornerAnalysisMode && cornerData && <CornerAnalysisPanel cornerData={cornerData} laps={laps} />}
+        {cornerAnalysisMode && cornerData && (
+          <CornerAnalysisPanel cornerData={cornerData} laps={laps} />
+        )}
       </div>
 
-      {/* Mounted ONCE for the lifetime of the desktop app — keeps the
-          r3f Canvas + WebGL context alive across layout-preset swaps.
-          Its CSS rect tracks whichever `<Viewer3DSlot>` is currently
-          rendered inside `<LayoutGrid>`. Error-bounded so a Canvas /
-          drei-asset failure can't unmount the rest of the app. */}
       <Viewer3DErrorBoundary>
         <PersistentViewer3D />
       </Viewer3DErrorBoundary>

@@ -11,7 +11,7 @@ import React from 'react'
 export const MOBILE_TABS = [
   { key: 'viewer3d',  label: '3D',    icon: '🚗' },
   { key: 'trackmap',  label: 'Map',   icon: '🗺' },
-  { key: 'telemetry', label: 'Tel',   icon: '📈' },
+  { key: 'telemetry', label: 'Speed & G', icon: '⚡' },
   { key: 'delta',     label: 'Δ',     icon: 'Δ'  },
   { key: 'settings',  label: 'More',  icon: '⚙'  },
 ]

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../../state/store'
 import { useContainerSize } from '../../hooks/useContainerSize'
 
-export function TrackMap({ deltaData, currentTime, duration, laps, selectedSectorNumber = null, viewport = null, onSectorClick, minimal = false }) {
+export function TrackMap({ deltaData, currentTime, duration, laps, selectedSectorNumber = null, viewport = null, onSectorClick, minimal = false, worldBounds = null }) {
   const canvasRef = useRef(null)
   const dotCanvasRef = useRef(null)
   const [hoveredSector, setHoveredSector] = useState(null)
@@ -26,19 +26,26 @@ export function TrackMap({ deltaData, currentTime, duration, laps, selectedSecto
 
   const transform = useMemo(() => {
     if (!laps.length || !laps[0]?.samples?.length) return null
-    const samples = laps[0].samples
     const W = size.w, H = size.h
     const PADDING = 16
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
-    for (const s of samples) {
-      minX = Math.min(minX, s.position[0]); maxX = Math.max(maxX, s.position[0])
-      minZ = Math.min(minZ, s.position[2]); maxZ = Math.max(maxZ, s.position[2])
+    let minX, maxX, minZ, maxZ
+    if (worldBounds) {
+      // Caller-controlled view (used by the VR layout's zoomable map).
+      ;({ minX, maxX, minZ, maxZ } = worldBounds)
+    } else {
+      // Default: auto-fit to the first lap's bounding box.
+      const samples = laps[0].samples
+      minX = Infinity; maxX = -Infinity; minZ = Infinity; maxZ = -Infinity
+      for (const s of samples) {
+        minX = Math.min(minX, s.position[0]); maxX = Math.max(maxX, s.position[0])
+        minZ = Math.min(minZ, s.position[2]); maxZ = Math.max(maxZ, s.position[2])
+      }
     }
     const rangeX = maxX - minX || 1, rangeZ = maxZ - minZ || 1
     const scale = Math.min((W - 2 * PADDING) / rangeX, (H - 2 * PADDING) / rangeZ)
     const offX = (W - rangeX * scale) / 2, offZ = (H - rangeZ * scale) / 2
     return { minX, minZ, scale, offX, offZ, W, H, toX: (x) => offX + (x - minX) * scale, toY: (z) => offZ + (z - minZ) * scale }
-  }, [laps, size.w, size.h])
+  }, [laps, size.w, size.h, worldBounds])
 
   useEffect(() => { transformRef.current = transform }, [transform])
 
