@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "_comment:compress": "LOSSLESS pipeline. Skips `simplify` (drops triangles → visible detail loss) and `flatten`/`join` (rename meshes → breaks `classifyTrackMesh()`'s material lookup → asphalt/kerb/wall textures fall through to grey). Just dedup → webp (for any embedded textures) → re-Draco at MAX quantization (16-bit positions, 12-bit normals, 14-bit UVs, 16-bit colours). The original GLB was Draco-encoded with looser quantization defaults; re-encoding at higher quality + dedup of duplicate accessors gives a real reduction with zero geometric loss.",
+    "compress:track": "gltf-transform dedup public/assets/models/track.glb /tmp/.gltf-step1.glb && gltf-transform webp /tmp/.gltf-step1.glb /tmp/.gltf-step2.glb && gltf-transform draco /tmp/.gltf-step2.glb public/assets/models/track.glb --quantize-position 16 --quantize-normal 12 --quantize-texcoord 14 --quantize-color 16 && rm /tmp/.gltf-step1.glb /tmp/.gltf-step2.glb",
+    "compress:car":   "gltf-transform dedup public/assets/models/m3_e46_steerable.glb /tmp/.gltf-step1.glb && gltf-transform webp /tmp/.gltf-step1.glb /tmp/.gltf-step2.glb && gltf-transform draco /tmp/.gltf-step2.glb public/assets/models/m3_e46_steerable.glb --quantize-position 16 --quantize-normal 12 --quantize-texcoord 14 --quantize-color 16 && rm /tmp/.gltf-step1.glb /tmp/.gltf-step2.glb",
+    "compress:assets": "npm run compress:track && npm run compress:car"
   },
   "dependencies": {
     "@react-three/drei": "^9.121.4",
@@ -20,7 +24,12 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.3.0",
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/extensions": "^4.3.0",
+    "@gltf-transform/functions": "^4.3.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "sharp": "^0.34.5",
     "vite": "^5.4.14"
   }
 }

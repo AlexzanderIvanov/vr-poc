@@ -79,7 +79,18 @@
         fetch(manifestUrl)
           .then(function (r) { return r.json() })
           .then(function (m) {
-            ;[m && m.track, m && m.car].forEach(function (rel) {
+            if (!m) return
+            // Preload the heavy assets: track + car GLBs, plus the first
+            // few laps' positional + telemetry JSONs. The lap JSONs are
+            // ~300 KB each — small, but each saved round-trip is worth
+            // ~80-150 ms on cellular. DataService's later `fetch()`s
+            // hit the in-flight HTTP cache transparently.
+            var urls = [m.track, m.car]
+            ;(m.laps || []).slice(0, 2).forEach(function (lap) {
+              if (lap.path) urls.push(lap.path)
+              if (lap.telemetry_path) urls.push(lap.telemetry_path)
+            })
+            urls.forEach(function (rel) {
               if (!rel) return
               var url = rel.indexOf('http') === 0 ? rel : (base + rel)
               var p = document.createElement('link')
